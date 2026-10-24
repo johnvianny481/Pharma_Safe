@@ -13,8 +13,9 @@ The full product architecture and phased build plan are in [`PharmaSafe Product 
 | Phase | Scope | Status |
 |---|---|---|
 | 0 | Foundations: monorepo, tooling, local stack, CI | **Done** |
-| 1 | Identity, tenancy, audit, e-signatures | Next |
-| 2–10 | Case domain → validation pack | Planned |
+| 1 | Identity, tenancy, audit, e-signatures | **Done** |
+| 2 | Case domain | Next |
+| 3–10 | Intake → validation pack | Planned |
 
 ## Repository layout
 
@@ -48,6 +49,8 @@ docs/adr, docs/validation, docs/runbooks
 ```bash
 make install   # uv sync --frozen + npm ci
 make up        # creates .env from .env.example, starts the stack, waits until healthy
+make migrate   # apply database migrations
+make seed      # demo tenants matching the local Keycloak users
 make ci        # lint, typecheck, tests, security scans, SBOMs (same as CI)
 make api       # API on http://localhost:8000/healthz
 ```
@@ -57,10 +60,12 @@ Windows without make:
 ```powershell
 ./scripts/dev.ps1 install
 ./scripts/dev.ps1 up
+./scripts/dev.ps1 migrate
+./scripts/dev.ps1 seed
 ./scripts/dev.ps1 ci
 ```
 
-The UI runs with `cd apps/review_ui && npm run dev` on http://localhost:5173. It proxies `/api` to the API.
+The UI runs with `cd apps/review_ui && npm run dev` on http://localhost:5173. It proxies `/api` to the API. Sign in with a demo user from the [runbook](docs/runbooks/local-development.md#demo-users).
 
 ## Local services
 

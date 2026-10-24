@@ -1,0 +1,450 @@
+{
+  "realm": "pharmasafe",
+  "displayName": "PharmaSafe (local)",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "failureFactor": 5,
+  "passwordPolicy": "length(12) and notUsername",
+  "accessTokenLifespan": 300,
+  "ssoSessionIdleTimeout": 900,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "client": {
+      "pharmasafe-api": [
+        {
+          "name": "intake_processor",
+          "description": "Receives and registers incoming reports",
+          "clientRole": true
+        },
+        {
+          "name": "case_processor",
+          "description": "Confirms or corrects case data and signs data entry",
+          "clientRole": true
+        },
+        {
+          "name": "quality_reviewer",
+          "description": "Performs the second-person (four-eyes) quality review",
+          "clientRole": true
+        },
+        {
+          "name": "medical_reviewer",
+          "description": "Physician: assesses seriousness and causality, medically approves",
+          "clientRole": true
+        },
+        {
+          "name": "tenant_admin",
+          "description": "Manages users, scopes and settings for one tenant",
+          "clientRole": true
+        },
+        {
+          "name": "platform_admin",
+          "description": "Operates the platform; no access to tenant case data",
+          "clientRole": true
+        }
+      ]
+    }
+  },
+  "clients": [
+    {
+      "clientId": "pharmasafe-api",
+      "name": "PharmaSafe API (resource server)",
+      "enabled": true,
+      "publicClient": false,
+      "bearerOnly": true,
+      "standardFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false
+    },
+    {
+      "clientId": "pharmasafe-ui",
+      "name": "PharmaSafe Review UI",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": [
+        "http://localhost:5173/*"
+      ],
+      "webOrigins": [
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:5173/*"
+      },
+      "fullScopeAllowed": true,
+      "protocolMappers": [
+        {
+          "name": "audience pharmasafe-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "pharmasafe-api",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        },
+        {
+          "name": "pharmasafe roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-client-role-mapper",
+          "config": {
+            "usermodel.clientRoleMapping.clientId": "pharmasafe-api",
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "auth_time",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "config": {
+            "user.session.note": "AUTH_TIME",
+            "claim.name": "auth_time",
+            "jsonType.label": "long",
+            "access.token.claim": "true",
+            "id.token.claim": "true"
+          }
+        },
+        {
+          "name": "tenant",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "tenant_id",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "product scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "ps_products",
+            "claim.name": "ps_products",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        },
+        {
+          "name": "region scope",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "config": {
+            "user.attribute": "ps_regions",
+            "claim.name": "ps_regions",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "access.token.claim": "true",
+            "id.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "acme.intake",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "acme.intake@pharmasafe.local",
+      "firstName": "Ira",
+      "lastName": "Intake",
+      "attributes": {
+        "ps_products": [
+          "*"
+        ],
+        "ps_regions": [
+          "*"
+        ],
+        "tenant_id": [
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "intake_processor"
+        ]
+      }
+    },
+    {
+      "username": "acme.processor",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "acme.processor@pharmasafe.local",
+      "firstName": "Cara",
+      "lastName": "Processor",
+      "attributes": {
+        "ps_products": [
+          "*"
+        ],
+        "ps_regions": [
+          "*"
+        ],
+        "tenant_id": [
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "case_processor"
+        ]
+      }
+    },
+    {
+      "username": "acme.quality",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "acme.quality@pharmasafe.local",
+      "firstName": "Quinn",
+      "lastName": "Quality",
+      "attributes": {
+        "ps_products": [
+          "*"
+        ],
+        "ps_regions": [
+          "*"
+        ],
+        "tenant_id": [
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "quality_reviewer"
+        ]
+      }
+    },
+    {
+      "username": "acme.medical",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "acme.medical@pharmasafe.local",
+      "firstName": "Meera",
+      "lastName": "Medic",
+      "attributes": {
+        "ps_products": [
+          "*"
+        ],
+        "ps_regions": [
+          "*"
+        ],
+        "tenant_id": [
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "medical_reviewer"
+        ]
+      }
+    },
+    {
+      "username": "acme.admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "acme.admin@pharmasafe.local",
+      "firstName": "Ada",
+      "lastName": "Admin",
+      "attributes": {
+        "ps_products": [
+          "*"
+        ],
+        "ps_regions": [
+          "*"
+        ],
+        "tenant_id": [
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "tenant_admin"
+        ]
+      }
+    },
+    {
+      "username": "acme.eu-only",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "acme.eu-only@pharmasafe.local",
+      "firstName": "Eli",
+      "lastName": "Scoped",
+      "attributes": {
+        "ps_products": [
+          "ACM-001"
+        ],
+        "ps_regions": [
+          "eu"
+        ],
+        "tenant_id": [
+          "11111111-1111-4111-8111-111111111111"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "case_processor"
+        ]
+      }
+    },
+    {
+      "username": "globex.processor",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "globex.processor@pharmasafe.local",
+      "firstName": "Gus",
+      "lastName": "Processor",
+      "attributes": {
+        "ps_products": [
+          "*"
+        ],
+        "ps_regions": [
+          "*"
+        ],
+        "tenant_id": [
+          "22222222-2222-4222-8222-222222222222"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "case_processor"
+        ]
+      }
+    },
+    {
+      "username": "globex.admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "globex.admin@pharmasafe.local",
+      "firstName": "Gia",
+      "lastName": "Admin",
+      "attributes": {
+        "ps_products": [
+          "*"
+        ],
+        "ps_regions": [
+          "*"
+        ],
+        "tenant_id": [
+          "22222222-2222-4222-8222-222222222222"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "tenant_admin"
+        ]
+      }
+    },
+    {
+      "username": "platform.admin",
+      "enabled": true,
+      "emailVerified": true,
+      "email": "platform.admin@pharmasafe.local",
+      "firstName": "Pat",
+      "lastName": "Platform",
+      "attributes": {
+        "ps_products": [],
+        "ps_regions": []
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "${KC_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
+      ],
+      "clientRoles": {
+        "pharmasafe-api": [
+          "platform_admin"
+        ]
+      }
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"unmanagedAttributePolicy\": \"ADMIN_EDIT\", \"attributes\": [{\"name\": \"username\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"email\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"validations\": {\"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"validations\": {\"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}], \"groups\": []}"
+          ]
+        }
+      }
+    ]
+  }
+}

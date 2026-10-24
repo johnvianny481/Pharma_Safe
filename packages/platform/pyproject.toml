@@ -3,7 +3,16 @@ name = "pharmasafe-platform"
 version = "0.1.0"
 description = "Cross-cutting platform services: settings, logging, auth, tenancy, audit, telemetry, outbox"
 requires-python = "==3.12.*"
-dependencies = ["pydantic>=2.9", "pydantic-settings>=2.6"]
+dependencies = [
+    "opentelemetry-api>=1.28",
+    "opentelemetry-exporter-otlp-proto-http>=1.28",
+    "opentelemetry-sdk>=1.28",
+    "psycopg[binary]>=3.2",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "pyjwt[crypto]>=2.10",
+    "sqlalchemy>=2.0.36",
+]
 
 [build-system]
 requires = ["hatchling>=1.25"]

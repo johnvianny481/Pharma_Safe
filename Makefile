@@ -9,7 +9,7 @@ UI := apps/review_ui
 SBOM_NPM := @cyclonedx/cyclonedx-npm@6.0.1
 
 .PHONY: help env up down reset logs ps sync install lint fmt typecheck test test-domain \
-        security sbom ui-install ci api ai-gateway
+        security sbom ui-install ci migrate seed verify-audit api ai-gateway
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-12s %s\n",$$1,$$2}'
@@ -75,6 +75,15 @@ sbom: ## CycloneDX SBOMs for Python and UI
 	cd $(UI) && npx --yes $(SBOM_NPM) --omit dev --output-file ../../sbom/review-ui.cdx.json
 
 ci: lint typecheck test security sbom ## Everything CI runs
+
+migrate: ## Apply database migrations (as the schema owner)
+	uv run alembic -c apps/api/alembic.ini upgrade head
+
+seed: ## Create the demo tenants that match the local Keycloak users
+	uv run python -m pharmasafe_api.tenancy.seed
+
+verify-audit: ## Verify every tenant's audit hash chain
+	uv run python -m pharmasafe_api.audit.verify_job
 
 api: ## Run the API locally on :8000
 	uv run uvicorn pharmasafe_api.main:app --reload --port 8000

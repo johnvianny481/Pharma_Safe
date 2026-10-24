@@ -23,6 +23,7 @@ dev = [
     "bandit[toml]>=1.8",
     "pip-audit>=2.7",
     "cyclonedx-bom>=5.1",
+    "hypothesis>=6.120",
 ]
 
 [tool.uv.workspace]
@@ -53,6 +54,8 @@ extend-exclude = ["apps/review_ui"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "S", "N", "SIM", "RUF", "PT"]
+# N818: exception names like ReauthenticationRequired read better without an Error suffix.
+ignore = ["N818"]
 
 [tool.ruff.lint.isort]
 known-first-party = [
@@ -66,7 +69,8 @@ known-first-party = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/**" = ["S101"]
+"**/tests/**" = ["S101", "S105", "S106", "S608", "E501", "PT012"]
+"conftest.py" = ["S105", "S106", "S608", "E501"]
 
 # ---------------------------------------------------------------- mypy
 # Strict everywhere. The build prompt requires strict on packages/domain; applying it
@@ -89,7 +93,7 @@ explicit_package_bases = true
 # ---------------------------------------------------------------- pytest
 [tool.pytest.ini_options]
 testpaths = ["packages", "apps"]
-norecursedirs = ["node_modules", "review_ui", ".venv"]
+norecursedirs = [".*", "build", "dist", "*.egg", "node_modules", "review_ui"]
 addopts = ["--import-mode=importlib", "--strict-markers", "-ra"]
 
 # ---------------------------------------------------------------- coverage

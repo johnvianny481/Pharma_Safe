@@ -1,27 +1,62 @@
 import { useQuery } from "@tanstack/react-query";
 
-interface Health {
-  status: string;
-  service: string;
+import { apiGet, type Me } from "./api";
+import { useAuth } from "./auth";
+
+function scopeLabel(values: string[] | null): string {
+  if (values === null) return "all";
+  return values.length ? values.join(", ") : "none";
 }
 
-async function fetchHealth(): Promise<Health> {
-  const response = await fetch("/api/healthz");
-  if (!response.ok) throw new Error(`API returned ${response.status}`);
-  return (await response.json()) as Health;
+function Profile({ accessToken }: { accessToken: string }) {
+  const me = useQuery({
+    queryKey: ["me", accessToken],
+    queryFn: () => apiGet<Me>("/me", accessToken),
+    retry: false,
+  });
+
+  if (me.isPending) return <p role="status">Loading your profile…</p>;
+  if (me.isError) return <p role="alert">Could not load your profile: {me.error.message}</p>;
+  return (
+    <dl>
+      <dt>User</dt>
+      <dd>
+        {me.data.display_name} ({me.data.username})
+      </dd>
+      <dt>Tenant</dt>
+      <dd>{me.data.tenant_id ?? "none (platform)"}</dd>
+      <dt>Roles</dt>
+      <dd>{me.data.roles.join(", ") || "none"}</dd>
+      <dt>Products</dt>
+      <dd>{scopeLabel(me.data.products)}</dd>
+      <dt>Regions</dt>
+      <dd>{scopeLabel(me.data.regions)}</dd>
+    </dl>
+  );
 }
 
-/** Phase 0 shell. Queues, case workspace and signing arrive in Phase 6. */
+/** Phase 1 shell: sign-in and identity. Queues and the case workspace arrive in Phase 6. */
 export function App() {
-  const health = useQuery({ queryKey: ["healthz"], queryFn: fetchHealth, retry: false });
+  const auth = useAuth();
 
   return (
     <main>
       <h1>PharmaSafe Review</h1>
-      <p role="status">
-        API:{" "}
-        {health.isPending ? "checking…" : health.isSuccess ? health.data.status : "unreachable"}
-      </p>
+      {auth.error && <p role="alert">Sign-in failed: {auth.error}</p>}
+      {auth.loading ? (
+        <p role="status">Checking your session…</p>
+      ) : auth.user ? (
+        <>
+          <Profile accessToken={auth.user.access_token} />
+          <button type="button" onClick={() => void auth.signOut()}>
+            Sign out
+          </button>
+        </>
+      ) : (
+        <button type="button" onClick={() => void auth.signIn()}>
+          Sign in
+        </button>
+      )}
     </main>
   );
 }

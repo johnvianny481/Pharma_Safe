@@ -16,9 +16,23 @@ jobs:
   python:
     name: Python - lint, types, tests, security
     runs-on: ubuntu-24.04
+    # Database tests need real PostgreSQL: RLS, grants and triggers are what they test.
+    # The conftest creates a throwaway database per run and fails (not skips) under CI.
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.0-pg16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U ci" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      PHARMASAFE_TEST_ADMIN_DATABASE_URL: postgresql+psycopg://ci:ci-only-password@localhost:5432/postgres
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
       - name: Install (locked)
@@ -50,7 +64,7 @@ jobs:
           uv run cyclonedx-py requirements sbom/python-requirements.txt --of JSON -o sbom/python.cdx.json
       - name: Upload evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: python-evidence
           path: |
@@ -64,8 +78,8 @@ jobs:
       run:
         working-directory: apps/review_ui
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -79,7 +93,7 @@ jobs:
         run: npm audit --audit-level=high
       - name: SBOM (CycloneDX)
         run: npx --yes @cyclonedx/cyclonedx-npm@6.0.1 --omit dev --output-file review-ui.cdx.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: review-ui-sbom
           path: apps/review_ui/review-ui.cdx.json
@@ -88,6 +102,6 @@ jobs:
     name: Local stack config
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Validate docker-compose with the example env
         run: docker compose --env-file .env.example -f deploy/docker-compose.yml config -q

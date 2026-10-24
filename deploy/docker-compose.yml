@@ -13,6 +13,8 @@ services:
     environment:
       <<: *pg-env
       POSTGRES_DB: pharmasafe
+      # Read by init/02-app-role.sh to create the app's login role.
+      PHARMASAFE_APP_DB_PASSWORD: ${PHARMASAFE_APP_DB_PASSWORD:?set in .env}
     ports: ["${POSTGRES_PORT:-5432}:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -62,10 +64,15 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.0.7
-    command: ["start-dev"]
+    # --import-realm loads deploy/keycloak/*.json when the realm does not exist yet.
+    command: ["start-dev", "--import-realm"]
     depends_on:
       postgres: { condition: service_healthy }
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
     environment:
+      # Substituted into the realm file's ${KC_DEMO_USER_PASSWORD} placeholders on import.
+      KC_DEMO_USER_PASSWORD: ${KC_DEMO_USER_PASSWORD:?set in .env}
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: ${POSTGRES_USER}

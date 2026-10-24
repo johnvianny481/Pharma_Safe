@@ -32,3 +32,4 @@ apps/review_ui/coverage/
 .vscode/
 .DS_Store
 Thumbs.db
+.hypothesis/

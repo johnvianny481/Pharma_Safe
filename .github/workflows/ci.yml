@@ -32,7 +32,7 @@ jobs:
       PHARMASAFE_TEST_ADMIN_DATABASE_URL: postgresql+psycopg://ci:ci-only-password@localhost:5432/postgres
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
       - name: Install (locked)

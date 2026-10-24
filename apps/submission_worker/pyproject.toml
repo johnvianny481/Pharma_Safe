@@ -1,0 +1,10 @@
+[project]
+name = "pharmasafe-submission-worker"
+version = "0.1.0"
+description = "E2B(R3) generation, validation, gateway connectors and acknowledgments"
+requires-python = "==3.12.*"
+dependencies = ["pharmasafe-domain", "pharmasafe-platform"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"

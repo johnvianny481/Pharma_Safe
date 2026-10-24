@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Node
+node_modules/
+apps/review_ui/dist/
+apps/review_ui/coverage/
+
+# Local config and secrets — only .env.example is committed
+.env
+.env.*
+!.env.example
+
+# Generated evidence (CI uploads these as artifacts)
+/sbom/
+/reports/
+*.cdx.json
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

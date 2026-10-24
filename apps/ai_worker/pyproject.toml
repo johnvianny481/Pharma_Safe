@@ -1,0 +1,10 @@
+[project]
+name = "pharmasafe-ai-worker"
+version = "0.1.0"
+description = "Temporal activities for the AI pipeline"
+requires-python = "==3.12.*"
+dependencies = ["pharmasafe-domain", "pharmasafe-platform"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"

@@ -1,0 +1,147 @@
+# Local development stack for PharmaSafe.
+# Start with `make up` (or `scripts/dev.ps1 up` on Windows), which passes --env-file ../.env.
+# Every image is pinned; bump versions deliberately and record why in the PR.
+name: pharmasafe
+
+x-pg-env: &pg-env
+  POSTGRES_USER: ${POSTGRES_USER:?set in .env}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.0-pg16
+    environment:
+      <<: *pg-env
+      POSTGRES_DB: pharmasafe
+    ports: ["${POSTGRES_PORT:-5432}:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d pharmasafe"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_SEEDS: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD}
+    ports: ["${TEMPORAL_PORT:-7233}:7233"]
+    healthcheck:
+      test: ["CMD-SHELL", "tctl --address $$(hostname -i):7233 cluster health | grep -q SERVING"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  temporal-ui:
+    image: temporalio/ui:2.31.2
+    depends_on:
+      temporal: { condition: service_healthy }
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    ports: ["${TEMPORAL_UI_PORT:-8233}:8080"]
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite:3.33.0
+    command: ["azurite-blob", "--blobHost", "0.0.0.0", "--location", "/data", "--skipApiVersionCheck"]
+    ports: ["${AZURITE_BLOB_PORT:-10000}:10000"]
+    volumes: [azurite:/data]
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 10000"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: ["start-dev"]
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:?set in .env}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:?set in .env}
+      KC_HEALTH_ENABLED: "true"
+    ports: ["${KEYCLOAK_PORT:-8180}:8080"]
+    healthcheck:
+      # The image has no curl/wget; probe the management port with bash's /dev/tcp.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  greenmail:
+    image: greenmail/standalone:2.1.2
+    environment:
+      GREENMAIL_OPTS: >-
+        -Dgreenmail.setup.test.smtp -Dgreenmail.setup.test.imap
+        -Dgreenmail.hostname=0.0.0.0 -Dgreenmail.auth.disabled
+    ports:
+      - "${GREENMAIL_SMTP_PORT:-3025}:3025"
+      - "${GREENMAIL_IMAP_PORT:-3143}:3143"
+      - "${GREENMAIL_API_PORT:-8086}:8080"
+    healthcheck:
+      # No curl/wget in this image either.
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8080 &&
+          printf 'GET /api/service/readiness HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          head -1 <&3 | grep -q ' 200'
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  langfuse:
+    image: langfuse/langfuse:2.95.11
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/langfuse
+      NEXTAUTH_URL: http://localhost:${LANGFUSE_PORT:-3000}
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:?set in .env}
+      SALT: ${LANGFUSE_SALT:?set in .env}
+      ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?set in .env}
+      TELEMETRY_ENABLED: "false"
+      HOSTNAME: 0.0.0.0
+      LANGFUSE_INIT_ORG_ID: pharmasafe-dev
+      LANGFUSE_INIT_ORG_NAME: PharmaSafe (local)
+      LANGFUSE_INIT_PROJECT_ID: pharmasafe-local
+      LANGFUSE_INIT_PROJECT_NAME: pharmasafe-local
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PUBLIC_KEY}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_SECRET_KEY}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL}
+      LANGFUSE_INIT_USER_NAME: dev
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD}
+    ports: ["${LANGFUSE_PORT:-3000}:3000"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/api/public/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+volumes:
+  pgdata:
+  azurite:

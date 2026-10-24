@@ -1,0 +1,93 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python - lint, types, tests, security
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: Install (locked)
+        run: uv sync --frozen
+      - name: Ruff
+        run: |
+          uv run ruff check --output-format=github .
+          uv run ruff format --check .
+      - name: mypy (strict)
+        run: >-
+          uv run mypy packages/domain/src packages/platform/src apps/api/src apps/ai_gateway/src
+          apps/workflow_worker/src apps/ai_worker/src apps/submission_worker/src
+      - name: Domain tests (85% coverage gate)
+        run: >-
+          uv run pytest packages/domain --cov=pharmasafe_domain --cov-fail-under=85
+          --cov-report=xml:reports/coverage-domain.xml --junitxml=reports/junit-domain.xml
+      - name: All tests
+        run: uv run pytest --junitxml=reports/junit-all.xml
+      - name: Static security analysis (bandit)
+        run: uv run bandit -c pyproject.toml -r packages apps
+      - name: Dependency audit (pip-audit)
+        run: |
+          uv export --frozen --no-dev --no-emit-workspace --no-hashes -o reports/requirements.txt -q
+          uv run pip-audit --strict -r reports/requirements.txt
+      - name: SBOM (CycloneDX)
+        run: |
+          mkdir -p sbom
+          uv export --frozen --no-dev --no-emit-workspace --no-hashes -o sbom/python-requirements.txt -q
+          uv run cyclonedx-py requirements sbom/python-requirements.txt --of JSON -o sbom/python.cdx.json
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-evidence
+          path: |
+            reports/
+            sbom/
+
+  review-ui:
+    name: Review UI - lint, types, tests, security
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: apps/review_ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/review_ui/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Dependency audit
+        run: npm audit --audit-level=high
+      - name: SBOM (CycloneDX)
+        run: npx --yes @cyclonedx/cyclonedx-npm@6.0.1 --omit dev --output-file review-ui.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: review-ui-sbom
+          path: apps/review_ui/review-ui.cdx.json
+
+  compose:
+    name: Local stack config
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate docker-compose with the example env
+        run: docker compose --env-file .env.example -f deploy/docker-compose.yml config -q

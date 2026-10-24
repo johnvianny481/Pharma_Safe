@@ -1,0 +1,10 @@
+[project]
+name = "pharmasafe-platform"
+version = "0.1.0"
+description = "Cross-cutting platform services: settings, logging, auth, tenancy, audit, telemetry, outbox"
+requires-python = "==3.12.*"
+dependencies = ["pydantic>=2.9", "pydantic-settings>=2.6"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"

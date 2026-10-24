@@ -1,0 +1,105 @@
+[project]
+name = "pharmasafe"
+version = "0.1.0"
+description = "PharmaSafe workspace root: AI-assisted adverse event case processing"
+requires-python = "==3.12.*"
+dependencies = [
+    "pharmasafe-domain",
+    "pharmasafe-platform",
+    "pharmasafe-api",
+    "pharmasafe-ai-gateway",
+    "pharmasafe-workflow-worker",
+    "pharmasafe-ai-worker",
+    "pharmasafe-submission-worker",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "httpx>=0.28",
+    "bandit[toml]>=1.8",
+    "pip-audit>=2.7",
+    "cyclonedx-bom>=5.1",
+]
+
+[tool.uv.workspace]
+members = [
+    "packages/domain",
+    "packages/platform",
+    "apps/api",
+    "apps/ai_gateway",
+    "apps/workflow_worker",
+    "apps/ai_worker",
+    "apps/submission_worker",
+]
+
+[tool.uv.sources]
+pharmasafe-domain = { workspace = true }
+pharmasafe-platform = { workspace = true }
+pharmasafe-api = { workspace = true }
+pharmasafe-ai-gateway = { workspace = true }
+pharmasafe-workflow-worker = { workspace = true }
+pharmasafe-ai-worker = { workspace = true }
+pharmasafe-submission-worker = { workspace = true }
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["apps/review_ui"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "N", "SIM", "RUF", "PT"]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "pharmasafe_domain",
+    "pharmasafe_platform",
+    "pharmasafe_api",
+    "pharmasafe_ai_gateway",
+    "pharmasafe_workflow_worker",
+    "pharmasafe_ai_worker",
+    "pharmasafe_submission_worker",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]
+
+# ---------------------------------------------------------------- mypy
+# Strict everywhere. The build prompt requires strict on packages/domain; applying it
+# repo-wide from day one is cheaper than tightening later.
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+mypy_path = [
+    "packages/domain/src",
+    "packages/platform/src",
+    "apps/api/src",
+    "apps/ai_gateway/src",
+    "apps/workflow_worker/src",
+    "apps/ai_worker/src",
+    "apps/submission_worker/src",
+]
+explicit_package_bases = true
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+testpaths = ["packages", "apps"]
+norecursedirs = ["node_modules", "review_ui", ".venv"]
+addopts = ["--import-mode=importlib", "--strict-markers", "-ra"]
+
+# ---------------------------------------------------------------- coverage
+[tool.coverage.run]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+
+# ---------------------------------------------------------------- bandit
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "node_modules"]

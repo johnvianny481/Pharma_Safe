@@ -1,0 +1,10 @@
+[project]
+name = "pharmasafe-workflow-worker"
+version = "0.1.0"
+description = "Temporal workers for the case workflow and regulatory clocks"
+requires-python = "==3.12.*"
+dependencies = ["pharmasafe-domain", "pharmasafe-platform"]
+
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"

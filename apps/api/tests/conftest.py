@@ -1,8 +1,8 @@
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +11,12 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import SimpleSpanProcessor
 from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
+from pharmasafe_api.cases import service as cases_service
+from pharmasafe_api.cases.models import CaseRow
+from pharmasafe_api.intake.extraction import OcrEngine, TesseractOcr
 from pharmasafe_api.main import create_app
+from pharmasafe_api.review import service as review
+from pharmasafe_domain.rules.review import Step
 from pharmasafe_platform.auth import TokenVerifier
 from pharmasafe_platform.blobstore import AzureBlobStore, BlobStore, InMemoryBlobStore
 from pharmasafe_platform.db import Database
@@ -36,13 +41,17 @@ class FakeOcr:
 
 
 def _make_client(
-    db: Database, verifier: TokenVerifier, spans: InMemorySpanExporter, blobs: BlobStore
+    db: Database,
+    verifier: TokenVerifier,
+    spans: InMemorySpanExporter,
+    blobs: BlobStore,
+    ocr: OcrEngine | None = None,
 ) -> TestClient:
     provider = TracerProvider()
     provider.add_span_processor(ContextSpanProcessor())
     provider.add_span_processor(SimpleSpanProcessor(spans))
     app = create_app(
-        verifier=verifier, database=db, blobs=blobs, ocr=FakeOcr(), tracer_provider=provider
+        verifier=verifier, database=db, blobs=blobs, ocr=ocr or FakeOcr(), tracer_provider=provider
     )
     return TestClient(app)
 
@@ -65,6 +74,17 @@ def intake_client(
         yield test_client
 
 
+@pytest.fixture
+def ocr_client(
+    db: Database, verifier: TokenVerifier, spans: InMemorySpanExporter, tesseract_cmd: str
+) -> Iterator[TestClient]:
+    """The API with real Tesseract OCR, found as the app finds it."""
+    ocr = TesseractOcr.find(tesseract_cmd)
+    assert ocr is not None
+    with _make_client(db, verifier, spans, InMemoryBlobStore(), ocr) as test_client:
+        yield test_client
+
+
 # ---------------------------------------------------------------- case API helpers
 
 
@@ -75,6 +95,7 @@ class CasesApi:
     client: TestClient
     issue_token: Callable[..., str]
     tenant: UUID
+    db: Database
 
     def headers(
         self, roles: Sequence[str] = ("case_processor",), sub: str = "proc-1", **claims: Any
@@ -113,6 +134,37 @@ class CasesApi:
             headers=self.headers(roles=roles, sub=sub),
         )
 
+    def open_task(self, case_id: str, version: int, kind: str) -> str:
+        """Open a review task, as the case workflow's activity would."""
+        with self.db.tenant_session(self.tenant) as session:
+            case = session.get_one(CaseRow, UUID(case_id))
+            task = review.open_task(
+                session, case, version, review.Kind(kind), uuid4(), datetime.now(UTC)
+            )
+            return str(task.id)
+
+    def complete_task(self, task_id: str, sub: str, role: str) -> Response:
+        reauth = self.issue_token(sub=sub, tenant_id=str(self.tenant), roles=[role])
+        return self.client.post(
+            f"/tasks/{task_id}/complete",
+            json={"reauth_token": reauth, "reason": "checked"},
+            headers=self.headers(roles=[role], sub=sub),
+        )
+
+    def complete_review(self, case_id: str, version: int = 1) -> None:
+        """Sign every review step the version needs before approval, as different people."""
+        with self.db.tenant_session(self.tenant) as session:
+            case = session.get_one(CaseRow, UUID(case_id))
+            plan = cases_service.review_plan_of(
+                session, case, cases_service.get_version(session, case.id, version)
+            )
+        for step in plan.steps[:-1]:
+            sub, role = REVIEWERS[step]
+            response = self.complete_task(
+                self.open_task(case_id, version, review.KIND_OF[step]), sub, role
+            )
+            assert response.status_code == 200, response.text
+
     def assessment(self, case_id: str, version: int = 1) -> dict[str, Any]:
         response = self.client.get(
             f"/cases/{case_id}/versions/{version}/assessment", headers=self.headers()
@@ -123,8 +175,18 @@ class CasesApi:
 
 
 @pytest.fixture
-def cases_api(client: TestClient, issue_token: Callable[..., str], tenant_a: UUID) -> CasesApi:
-    return CasesApi(client, issue_token, tenant_a)
+def cases_api(
+    client: TestClient, issue_token: Callable[..., str], tenant_a: UUID, db: Database
+) -> CasesApi:
+    return CasesApi(client, issue_token, tenant_a, db)
+
+
+# Who signs each review step in tests. The approver (qa-1) is someone else again.
+REVIEWERS = {
+    Step.DATA_ENTRY: ("proc-1", "case_processor"),
+    Step.QUALITY: ("qa-2", "quality_reviewer"),
+    Step.MEDICAL: ("doc-1", "medical_reviewer"),
+}
 
 
 def set_op(path: str, value: Any) -> dict[str, Any]:

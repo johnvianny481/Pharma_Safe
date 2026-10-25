@@ -61,6 +61,7 @@ $targets = [ordered]@{
     seed         = { Run uv run python -m pharmasafe_api.tenancy.seed }
     "verify-audit" = { Run uv run python -m pharmasafe_api.audit.verify_job }
     "email-intake" = { Run uv run python -m pharmasafe_api.intake.email_intake }
+    "workflow-worker" = { Run uv run python -m pharmasafe_workflow_worker }
     api          = { Run uv run uvicorn pharmasafe_api.main:app --reload --port 8000 }
     "ai-gateway" = { Run uv run uvicorn pharmasafe_ai_gateway.main:app --reload --port 8001 }
     help         = { "Targets: " + ($targets.Keys -join ", ") }

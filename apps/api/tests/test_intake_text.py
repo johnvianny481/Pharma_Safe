@@ -2,16 +2,25 @@
 
 from collections.abc import Callable
 from email.message import EmailMessage
+from pathlib import Path
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from pharmasafe_api.intake.email_intake import parse_email
-from pharmasafe_api.intake.extraction import TesseractOcr, TextStatus, extract_text, html_to_text
+from pharmasafe_api.intake.extraction import (
+    TesseractOcr,
+    TextStatus,
+    extract_text,
+    html_to_text,
+    parse_language_list,
+)
 from pharmasafe_api.intake.language import UNDETERMINED, detect_language
 from pharmasafe_api.intake.splitting import split_reports
 from pharmasafe_platform.blobstore import sha256_hex
+
+OCR_IMAGE = Path(__file__).parent / "fixtures" / "ocr_report.png"
 
 
 class _Ocr:
@@ -174,12 +183,40 @@ def test_unknown_types_are_kept_but_unsupported() -> None:
     )
 
 
-def test_tesseract_adapter_when_installed() -> None:
-    engine = TesseractOcr.find()
-    if engine is None:
-        pytest.skip("tesseract is not installed")
-    assert engine.supports("image/png")
-    assert not engine.supports("application/pdf")
+def test_tesseract_reads_the_text_of_an_image(tesseract_cmd: str) -> None:
+    engine = TesseractOcr.find(tesseract_cmd)
+    assert engine is not None
+    result = extract_text(OCR_IMAGE.read_bytes(), "image/png", engine)
+    assert (result.method, result.status) == ("ocr:tesseract", TextStatus.EXTRACTED)
+    text = " ".join(result.text.split())
+    assert "The patient developed a severe rash" in text
+    assert "Acmezol 20 mg" in text
+
+
+def test_tesseract_failure_marks_the_document_failed(tesseract_cmd: str) -> None:
+    engine = TesseractOcr.find(tesseract_cmd)
+    assert engine is not None
+    assert extract_text(b"not an image", "image/png", engine).status is TextStatus.FAILED
+
+
+def test_tesseract_uses_only_installed_languages(tesseract_cmd: str) -> None:
+    engine = TesseractOcr.find(tesseract_cmd, ("eng", "zzz"))
+    assert engine is not None
+    assert engine.languages == ("eng",)
+    assert TesseractOcr.find(tesseract_cmd, ("zzz",)) is None  # nothing usable: unavailable
+    assert TesseractOcr.find("no-such-tesseract") is None
+
+
+@pytest.mark.parametrize(
+    "output",
+    [
+        'List of available languages in "/usr/share/tesseract-ocr/5/tessdata/" (3):\neng\nosd\ndeu\n',
+        "List of available languages (3):\r\neng\r\nosd\r\ndeu\r\n",  # Tesseract 4, Windows
+    ],
+)
+def test_language_list_is_parsed(output: str) -> None:
+    assert parse_language_list(output) == {"eng", "osd", "deu"}
+    assert parse_language_list("unexpected output") == frozenset()
 
 
 # ---------------------------------------------------------------- email parsing

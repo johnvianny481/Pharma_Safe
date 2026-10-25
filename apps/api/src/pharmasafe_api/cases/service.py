@@ -32,9 +32,17 @@ from pharmasafe_domain.regions import region_for_country
 from pharmasafe_domain.rules.checks import Issue, approval_blockers
 from pharmasafe_domain.rules.clocks import ClockTracker, Obligation, RuleSetRegistry, Snapshot
 from pharmasafe_domain.rules.clocks import day_zero as first_day_zero
+from pharmasafe_domain.rules.review import (
+    ReviewPlan,
+    SignatureFact,
+    Step,
+    qc_sampled,
+    review_plan,
+    signing_blockers,
+)
 from pharmasafe_platform.audit import Actor, AuditEvent, append_audit
 from pharmasafe_platform.auth import DataScope, Principal
-from pharmasafe_platform.models import AuditLedgerRow, TenantRow
+from pharmasafe_platform.models import AuditLedgerRow, ESignatureRow, TenantRow
 from pharmasafe_platform.outbox import OutboxEvent, enqueue
 from pharmasafe_platform.signatures import (
     SignableRecord,
@@ -239,6 +247,7 @@ def apply_changes(
             reason=reason,
         )
     _store(session, case, version, current, actor, ctx)
+    _enqueue(session, case, "case.updated", ctx, version=version_number, revision=version.revision)
     return version
 
 
@@ -258,6 +267,7 @@ def approve_version(
     if version.status != DRAFT:
         raise CaseConflict(f"version {version_number} is already approved")
     blockers = approval_blockers(case_of(version), today=ctx.today)
+    blockers += review_blockers(session, case, version, Step.APPROVAL, signer.subject)
     if blockers:
         raise ApprovalBlocked(blockers)
     signature = signatures.sign(
@@ -288,6 +298,67 @@ def approve_version(
     )
     _enqueue(session, case, "case.version_approved", ctx, version=version_number)
     return version
+
+
+def sign_review(
+    session: Session,
+    case: CaseRow,
+    version_number: int,
+    *,
+    step: Step,
+    signer: Principal,
+    reauth: Principal,
+    signatures: SignatureService,
+    ctx: CaseContext,
+    reason: str | None = None,
+) -> ESignatureRow:
+    """Sign a review step (data entry, quality or medical) on the version's current content."""
+    if step is Step.APPROVAL:
+        raise ValueError("approval is signed through approve_version")
+    version = get_version(session, case.id, version_number, for_update=True)
+    if version.status != DRAFT:
+        raise CaseConflict(f"version {version_number} is already approved")
+    blockers = review_blockers(session, case, version, step, signer.subject)
+    if blockers:
+        raise ApprovalBlocked(blockers)
+    return signatures.sign(
+        session,
+        signer=signer,
+        reauth=reauth,
+        record=SignableRecord(ENTITY, str(case.id), version_number, version.content_hash),
+        meaning=SignatureMeaning(step.value),
+        reason=reason,
+        now=ctx.now,
+    )
+
+
+def review_plan_of(session: Session, case: CaseRow, version: CaseVersionRow) -> ReviewPlan:
+    tenant = session.get_one(TenantRow, case.tenant_id)
+    sampled = qc_sampled(str(case.id), version.version, tenant.qc_sample_rate)
+    return review_plan(case_of(version), sampled=sampled)
+
+
+def review_signatures(session: Session, case_id: UUID, version: int) -> list[SignatureFact]:
+    rows = session.scalars(
+        select(ESignatureRow).where(
+            ESignatureRow.entity_type == ENTITY,
+            ESignatureRow.entity_id == str(case_id),
+            ESignatureRow.entity_version == version,
+        )
+    )
+    return [SignatureFact(r.meaning, r.signer_id, r.content_hash) for r in rows]
+
+
+def review_blockers(
+    session: Session, case: CaseRow, version: CaseVersionRow, step: Step, signer_id: str
+) -> list[Issue]:
+    return signing_blockers(
+        step,
+        signer_id,
+        review_signatures(session, case.id, version.version),
+        review_plan_of(session, case, version),
+        version.content_hash,
+    )
 
 
 def start_follow_up(

@@ -11,6 +11,7 @@ from pharmasafe_api.cases.router import router as cases_router
 from pharmasafe_api.identity.router import router as identity_router
 from pharmasafe_api.intake.extraction import OcrEngine, TesseractOcr
 from pharmasafe_api.intake.router import router as intake_router
+from pharmasafe_api.review.router import router as review_router
 from pharmasafe_domain.rules.clocks import seed_registry
 from pharmasafe_platform.auth import TokenVerifier, jwks_key_resolver
 from pharmasafe_platform.blobstore import AzureBlobStore, BlobStore
@@ -67,6 +68,7 @@ def create_app(
     app.include_router(audit_router)
     app.include_router(cases_router)
     app.include_router(intake_router)
+    app.include_router(review_router)
 
     FastAPIInstrumentor.instrument_app(
         app,

@@ -5,10 +5,11 @@ Alembic migrations in ``apps/api/migrations``; these classes only map it.
 """
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, DateTime, Identity, Integer, String, Text
+from sqlalchemy import BigInteger, DateTime, Identity, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -26,6 +27,7 @@ class TenantRow(Base):
     region: Mapped[str] = mapped_column(String(8))
     regulators: Mapped[list[str]] = mapped_column(ARRAY(Text))
     intake_mailbox: Mapped[str | None] = mapped_column(Text)
+    qc_sample_rate: Mapped[Decimal] = mapped_column(Numeric(4, 3))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

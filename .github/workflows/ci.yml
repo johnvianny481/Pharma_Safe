@@ -47,6 +47,13 @@ jobs:
       - uses: astral-sh/setup-uv@v10.3.2
         with:
           enable-cache: true
+      # OCR tests run real Tesseract with every language the adapter asks for.
+      - name: Install Tesseract OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tesseract-ocr \
+            tesseract-ocr-deu tesseract-ocr-fra tesseract-ocr-spa tesseract-ocr-ita
+          tesseract --list-langs
       - name: Install (locked)
         run: uv sync --frozen
       - name: Ruff

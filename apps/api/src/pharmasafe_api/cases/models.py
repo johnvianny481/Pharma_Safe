@@ -22,6 +22,7 @@ class CaseRow(Base):
     product_codes: Mapped[list[str]] = mapped_column(ARRAY(Text))
     day_zero: Mapped[date | None] = mapped_column(Date)
     latest_version: Mapped[int] = mapped_column(Integer)
+    workflow_stage: Mapped[str] = mapped_column(Text, default="received")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(Text)
 

@@ -2,6 +2,7 @@
 
 import secrets
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 from uuid import UUID
 
@@ -117,6 +118,23 @@ def test_uploaded_files_are_retrievable_byte_for_byte(
         assert content.headers["x-content-sha256"] == sha256_hex(original)
         assert content.headers["content-disposition"].startswith("attachment;")
         assert content.headers["x-content-type-options"] == "nosniff"
+
+
+def test_an_uploaded_image_is_read_by_tesseract_into_a_case(
+    ocr_client: TestClient, issue_token: TokenFactory, tenant_a: UUID
+) -> None:
+    image = (Path(__file__).parent / "fixtures" / "ocr_report.png").read_bytes()
+    response = ocr_client.post(
+        "/intake/uploads",
+        files=[("files", ("scan.png", image, "image/png"))],
+        headers=_headers(issue_token, tenant_a, _key()),
+    )
+    assert response.status_code == 201, response.text
+    ack = response.json()
+    [document] = ack["documents"]
+    assert (document["text_status"], document["language"]) == ("extracted", "en")
+    [report] = ack["reports"]
+    assert report["text_end"] - report["text_start"] > 50  # the recognised text, not empty
 
 
 def test_a_document_with_several_reports_becomes_several_cases(

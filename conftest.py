@@ -11,6 +11,7 @@ Without it, database tests are skipped locally and fail in CI.
 
 import os
 import secrets
+import shutil
 import socket
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -54,6 +55,8 @@ class _TestEnv(BaseSettings):
     test_imap_host: str = "localhost"
     test_imap_port: int = 3143
     test_smtp_port: int = 3025
+    # Tesseract for OCR tests (CI installs it; on Windows set the full path in .env).
+    tesseract_cmd: str = "tesseract"
 
 
 def _unavailable(reason: str) -> None:
@@ -263,3 +266,12 @@ def mail_server() -> MailServer:
     except OSError as exc:
         _unavailable(f"cannot reach GreenMail: {exc}")
     return server
+
+
+@pytest.fixture(scope="session")
+def tesseract_cmd() -> str:
+    """The Tesseract executable (``PHARMASAFE_TESSERACT_CMD``), as the API would find it."""
+    command = _TestEnv().tesseract_cmd
+    if shutil.which(command) is None:
+        _unavailable(f"tesseract is not installed (looked for {command!r})")
+    return command

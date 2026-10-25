@@ -13,7 +13,7 @@ Consumers must therefore deduplicate on the event ``id``. Events are published i
 that later events do not overtake an earlier one.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -88,10 +88,14 @@ class OutboxRelay:
         self._publisher = publisher
         self._batch_size = batch_size
 
-    def run_once(self) -> int:
-        """Publish pending events for every tenant. Returns how many were published."""
-        with self._database.system_session() as session:
-            tenant_ids = session.scalars(select(TenantRow.id).order_by(TenantRow.id)).all()
+    def run_once(self, tenant_ids: Iterable[UUID] | None = None) -> int:
+        """Publish pending events (for every tenant, or only the given ones).
+
+        Returns how many were published.
+        """
+        if tenant_ids is None:
+            with self._database.system_session() as session:
+                tenant_ids = session.scalars(select(TenantRow.id).order_by(TenantRow.id)).all()
         return sum(self._relay_tenant(tenant_id) for tenant_id in tenant_ids)
 
     def _relay_tenant(self, tenant_id: UUID) -> int:

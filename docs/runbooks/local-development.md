@@ -11,6 +11,7 @@
 | Verify audit chains | `make verify-audit` | `./scripts/dev.ps1 verify-audit` |
 | Run the API (:8000) | `make api` | `./scripts/dev.ps1 api` |
 | Poll intake mailboxes | `make email-intake` | `./scripts/dev.ps1 email-intake` |
+| Run the case workflow worker | `make workflow-worker` | `./scripts/dev.ps1 workflow-worker` |
 | Status | `make ps` | `./scripts/dev.ps1 ps` |
 | Logs | `make logs` | `./scripts/dev.ps1 logs` |
 | Stop (keep data) | `make down` | `./scripts/dev.ps1 down` |
@@ -62,9 +63,22 @@ Every intake POST needs an `Idempotency-Key` header, such as a UUID. Send the sa
 
 **Email.** `make seed` gives Acme the mailbox `intake@acme.pharmasafe.local` and Globex `intake@globex.pharmasafe.local`. Send a message to GreenMail on SMTP port 3025, for example with `swaks` or Python's `smtplib`, then run `make email-intake` (`--once` for a single pass).
 
-**OCR.** Images are read with Tesseract when `tesseract` is on the PATH (or set `PHARMASAFE_TESSERACT_CMD`). Without it, images and scanned PDFs are stored and marked for manual entry.
+**OCR.** Images are read with Tesseract when `tesseract` is on the PATH (or set `PHARMASAFE_TESSERACT_CMD`). Without it, images and scanned PDFs are stored and marked for manual entry. On Windows, install it with `winget install UB-Mannheim.TesseractOCR` and set `PHARMASAFE_TESSERACT_CMD=C:/Program Files/Tesseract-OCR/tesseract.exe` in `.env`. OCR uses English, German, French, Spanish and Italian when their language data is installed. The API logs a warning at startup for any that are missing. The Windows installer adds only English by default. Copy the others' `.traineddata` files from [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) into its `tessdata` folder.
 
 **Sources** go to the `sources` container in Azurite, one blob per document named by its SHA-256.
+
+## Case workflow and review tasks
+
+Run `make workflow-worker` next to the API. It runs the Temporal case workflow and the outbox relay, which turns case events into workflow signals (ADR 0013). Each case is the workflow `case-{case_id}`. Inspect it in the Temporal UI at http://localhost:8233.
+
+- `GET /tasks` is your work queue (`?mine=true` for tasks assigned to you), nearest regulatory deadline first.
+- `POST /tasks/{id}/claim` or `POST /tasks/{id}/assign` with `{"assignee": ...}` assigns a task.
+- `POST /tasks/{id}/complete` with `reauth_token` signs the step (Reviewed, Quality reviewed, Medically approved or Approved).
+- `POST /tasks/{id}/return` with `reason` sends the case back to data entry.
+
+The person who did data entry cannot sign a later step of the same version. To try it, sign data entry as `acme.processor`, then quality and medical review as `acme.quality` and `acme.medical`. Escalations are in `deadline_escalations` and the audit trail.
+
+**Workflow changes.** A change to `workflows.py` that alters the commands a running workflow issues must be guarded with `workflow.patched(...)`. The replay test fails otherwise. Record a new history with `PHARMASAFE_RECORD_HISTORIES=1` and commit it with the change.
 
 ## Database roles
 

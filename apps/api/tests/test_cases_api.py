@@ -22,6 +22,7 @@ RECEIPT = datetime.now(UTC).date() - timedelta(days=10)
 
 def _approved_case(cases_api: Any, case_ops: Ops, **kw: Any) -> dict[str, Any]:
     case = cases_api.create(case_ops(RECEIPT, **kw))
+    cases_api.complete_review(case["id"])
     response = cases_api.approve(case["id"])
     assert response.status_code == 200, response.text
     return case
@@ -112,6 +113,7 @@ def test_approval_needs_the_right_role_and_a_fresh_reauthentication(
     cases_api: Any, case_ops: Ops, issue_token: Callable[..., str]
 ) -> None:
     case = cases_api.create(case_ops(RECEIPT))
+    cases_api.complete_review(case["id"])
     url = f"/cases/{case['id']}/versions/1/approve"
     processor = cases_api.headers(roles=["case_processor"])
     assert (
@@ -200,6 +202,7 @@ def test_past_version_is_rebuilt_exactly_from_the_audit_trail(
     )
     cases_api.edit(case["id"], 1, [{"op": "add", "path": "/reporters", "id": "p2"},
                                    op("/reporters/p2/qualification", "pharmacist")])  # fmt: skip
+    cases_api.complete_review(case["id"])
     assert cases_api.approve(case["id"]).status_code == 200
     stored = cases_api.version(case["id"])
 

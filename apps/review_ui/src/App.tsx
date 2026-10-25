@@ -2,6 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { apiGet, type Me } from "./api";
 import { useAuth } from "./auth";
+import { IntakeForm } from "./IntakeForm";
+
+const INTAKE_ROLES = ["intake_processor", "case_processor"];
 
 function scopeLabel(values: string[] | null): string {
   if (values === null) return "all";
@@ -17,25 +20,29 @@ function Profile({ accessToken }: { accessToken: string }) {
 
   if (me.isPending) return <p role="status">Loading your profile…</p>;
   if (me.isError) return <p role="alert">Could not load your profile: {me.error.message}</p>;
+  const canEnterReports = me.data.roles.some((role) => INTAKE_ROLES.includes(role));
   return (
-    <dl>
-      <dt>User</dt>
-      <dd>
-        {me.data.display_name} ({me.data.username})
-      </dd>
-      <dt>Tenant</dt>
-      <dd>{me.data.tenant_id ?? "none (platform)"}</dd>
-      <dt>Roles</dt>
-      <dd>{me.data.roles.join(", ") || "none"}</dd>
-      <dt>Products</dt>
-      <dd>{scopeLabel(me.data.products)}</dd>
-      <dt>Regions</dt>
-      <dd>{scopeLabel(me.data.regions)}</dd>
-    </dl>
+    <>
+      <dl>
+        <dt>User</dt>
+        <dd>
+          {me.data.display_name} ({me.data.username})
+        </dd>
+        <dt>Tenant</dt>
+        <dd>{me.data.tenant_id ?? "none (platform)"}</dd>
+        <dt>Roles</dt>
+        <dd>{me.data.roles.join(", ") || "none"}</dd>
+        <dt>Products</dt>
+        <dd>{scopeLabel(me.data.products)}</dd>
+        <dt>Regions</dt>
+        <dd>{scopeLabel(me.data.regions)}</dd>
+      </dl>
+      {canEnterReports && <IntakeForm accessToken={accessToken} />}
+    </>
   );
 }
 
-/** Phase 1 shell: sign-in and identity. Queues and the case workspace arrive in Phase 6. */
+/** Sign-in, identity and report intake. Queues and the case workspace arrive in Phase 6. */
 export function App() {
   const auth = useAuth();
 

@@ -153,14 +153,14 @@ def case_of(version: CaseVersionRow) -> SafetyCase:
 
 def create_case(
     session: Session,
-    principal: Principal,
+    tenant_id: UUID,
+    actor: Actor,
     content: SafetyCase,
     ctx: CaseContext,
     *,
     reason: str | None = None,
 ) -> tuple[CaseRow, CaseVersionRow]:
-    tenant_id = principal.require_tenant()
-    actor = Actor.from_principal(principal)
+    """A new case with ``content`` as version 1 (a draft). ``actor`` may be a system channel."""
     # Serialise numbering per tenant, like the audit ledger's sequence.
     session.execute(
         text("select pg_advisory_xact_lock(hashtextextended(:key, 0))"),

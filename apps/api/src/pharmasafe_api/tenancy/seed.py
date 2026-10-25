@@ -12,8 +12,20 @@ from sqlalchemy import create_engine, text
 from pharmasafe_platform.settings import Environment, get_settings
 
 DEMO_TENANTS = (
-    (UUID("11111111-1111-4111-8111-111111111111"), "acme-pharma", "Acme Pharma", "eu"),
-    (UUID("22222222-2222-4222-8222-222222222222"), "globex-bio", "Globex Bio", "us"),
+    (
+        UUID("11111111-1111-4111-8111-111111111111"),
+        "acme-pharma",
+        "Acme Pharma",
+        "eu",
+        "intake@acme.pharmasafe.local",
+    ),
+    (
+        UUID("22222222-2222-4222-8222-222222222222"),
+        "globex-bio",
+        "Globex Bio",
+        "us",
+        "intake@globex.pharmasafe.local",
+    ),
 )
 
 
@@ -23,14 +35,14 @@ def main() -> None:
         raise SystemExit("demo tenants are only for dev and test environments")
     engine = create_engine(settings.migration_database_url)
     with engine.begin() as conn:
-        for tenant_id, slug, name, region in DEMO_TENANTS:
+        for tenant_id, slug, name, region, mailbox in DEMO_TENANTS:
             conn.execute(
                 text(
-                    "INSERT INTO tenants (id, slug, name, region)"
-                    " VALUES (:id, :slug, :name, :region)"
-                    " ON CONFLICT (id) DO NOTHING"
+                    "INSERT INTO tenants (id, slug, name, region, intake_mailbox)"
+                    " VALUES (:id, :slug, :name, :region, :mailbox)"
+                    " ON CONFLICT (id) DO UPDATE SET intake_mailbox = EXCLUDED.intake_mailbox"
                 ),
-                {"id": tenant_id, "slug": slug, "name": name, "region": region},
+                {"id": tenant_id, "slug": slug, "name": name, "region": region, "mailbox": mailbox},
             )
             print(f"tenant {slug} ({tenant_id}) ready")
     engine.dispose()

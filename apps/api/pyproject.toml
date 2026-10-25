@@ -10,6 +10,8 @@ dependencies = [
     "uvicorn[standard]>=0.32",
     "alembic>=1.14",
     "opentelemetry-instrumentation-fastapi>=0.49b0",
+    "pypdf>=5.1",
+    "python-multipart>=0.0.18",
 ]
 
 [build-system]

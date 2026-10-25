@@ -10,6 +10,7 @@
 | Create demo tenants | `make seed` | `./scripts/dev.ps1 seed` |
 | Verify audit chains | `make verify-audit` | `./scripts/dev.ps1 verify-audit` |
 | Run the API (:8000) | `make api` | `./scripts/dev.ps1 api` |
+| Poll intake mailboxes | `make email-intake` | `./scripts/dev.ps1 email-intake` |
 | Status | `make ps` | `./scripts/dev.ps1 ps` |
 | Logs | `make logs` | `./scripts/dev.ps1 logs` |
 | Stop (keep data) | `make down` | `./scripts/dev.ps1 down` |
@@ -48,6 +49,22 @@ The OpenAPI docs are at http://localhost:8000/docs once the API is running. A ca
 6. `GET /cases/{id}/versions/1/rebuild?as_of=...` (a tenant admin or quality reviewer) rebuilds a version from the audit trail.
 
 Clock rules are configurable **examples** in `packages/domain/src/pharmasafe_domain/rules/rule_sets/` (ADR 0010). A tenant's regulators are in `tenants.regulators`, and the default is FDA and EMA.
+
+## Intake
+
+Every intake POST needs an `Idempotency-Key` header, such as a UUID. Send the same key again when retrying.
+
+- `POST /intake/reports` takes JSON `{"text": ...}`, from customer systems.
+- `POST /intake/forms` takes the web/call-centre form. The review UI shows it to intake and case processors.
+- `POST /intake/uploads` takes multipart `files`: PDFs, images, text and `.eml`.
+- `GET /intake/submissions/{id}` returns the acknowledgment, the documents, and the cases created.
+- `GET /intake/documents/{id}/content` returns the original bytes, verified against their SHA-256.
+
+**Email.** `make seed` gives Acme the mailbox `intake@acme.pharmasafe.local` and Globex `intake@globex.pharmasafe.local`. Send a message to GreenMail on SMTP port 3025, for example with `swaks` or Python's `smtplib`, then run `make email-intake` (`--once` for a single pass).
+
+**OCR.** Images are read with Tesseract when `tesseract` is on the PATH (or set `PHARMASAFE_TESSERACT_CMD`). Without it, images and scanned PDFs are stored and marked for manual entry.
+
+**Sources** go to the `sources` container in Azurite, one blob per document named by its SHA-256.
 
 ## Database roles
 

@@ -9,8 +9,11 @@ from opentelemetry.sdk.trace import TracerProvider
 from pharmasafe_api.audit.router import router as audit_router
 from pharmasafe_api.cases.router import router as cases_router
 from pharmasafe_api.identity.router import router as identity_router
+from pharmasafe_api.intake.extraction import OcrEngine, TesseractOcr
+from pharmasafe_api.intake.router import router as intake_router
 from pharmasafe_domain.rules.clocks import seed_registry
 from pharmasafe_platform.auth import TokenVerifier, jwks_key_resolver
+from pharmasafe_platform.blobstore import AzureBlobStore, BlobStore
 from pharmasafe_platform.db import Database
 from pharmasafe_platform.logging import configure_logging
 from pharmasafe_platform.settings import Settings, get_settings
@@ -25,6 +28,8 @@ def create_app(
     *,
     verifier: TokenVerifier | None = None,
     database: Database | None = None,
+    blobs: BlobStore | None = None,
+    ocr: OcrEngine | None = None,
     tracer_provider: TracerProvider | None = None,
 ) -> FastAPI:
     """Build the app. Tests inject a verifier with local keys and a test database."""
@@ -43,6 +48,14 @@ def create_app(
     app.state.signatures = SignatureService(
         max_auth_age=timedelta(seconds=settings.signature_max_auth_age_seconds)
     )
+    app.state.blobs = blobs or AzureBlobStore(
+        settings.blob_endpoint,
+        settings.blob_account,
+        settings.blob_key.get_secret_value(),
+        settings.blob_container,
+    )
+    # None when Tesseract is not installed: images are then held for manual entry.
+    app.state.ocr = ocr or TesseractOcr.find(settings.tesseract_cmd)
     # Example rule sets for now; per-tenant configuration arrives with the admin screens.
     app.state.clock_rules = seed_registry()
 
@@ -53,6 +66,7 @@ def create_app(
     app.include_router(identity_router)
     app.include_router(audit_router)
     app.include_router(cases_router)
+    app.include_router(intake_router)
 
     FastAPIInstrumentor.instrument_app(
         app,

@@ -17,6 +17,7 @@ from pharmasafe_domain.case import SafetyCase
 from pharmasafe_domain.changes import AddItem, RemoveItem, SetField
 from pharmasafe_domain.provenance import Tracked
 from pharmasafe_domain.rules.clocks import seed_registry
+from pharmasafe_platform.audit import Actor
 from pharmasafe_platform.auth import Principal
 from pharmasafe_platform.db import Database
 from pharmasafe_platform.signatures import content_hash
@@ -74,7 +75,11 @@ def test_every_past_state_rebuilds_exactly(
     at = START
     with db.tenant_session(tenant) as session:
         case, version = service.create_case(
-            session, principal, SafetyCase(), service.CaseContext(REGISTRY, at)
+            session,
+            tenant,
+            Actor.from_principal(principal),
+            SafetyCase(),
+            service.CaseContext(REGISTRY, at),
         )
         history = [(at, dict(version.content))]
 

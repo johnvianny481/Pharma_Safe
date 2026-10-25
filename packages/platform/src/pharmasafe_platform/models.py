@@ -25,6 +25,7 @@ class TenantRow(Base):
     name: Mapped[str] = mapped_column(String(200))
     region: Mapped[str] = mapped_column(String(8))
     regulators: Mapped[list[str]] = mapped_column(ARRAY(Text))
+    intake_mailbox: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

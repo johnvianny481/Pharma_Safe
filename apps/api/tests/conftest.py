@@ -13,6 +13,7 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 
 from pharmasafe_api.main import create_app
 from pharmasafe_platform.auth import TokenVerifier
+from pharmasafe_platform.blobstore import AzureBlobStore, BlobStore, InMemoryBlobStore
 from pharmasafe_platform.db import Database
 from pharmasafe_platform.telemetry import ContextSpanProcessor
 
@@ -22,15 +23,45 @@ def spans() -> InMemorySpanExporter:
     return InMemorySpanExporter()
 
 
+class FakeOcr:
+    """Stands in for Tesseract: "reads" an image whose bytes are UTF-8 text."""
+
+    name = "fake"
+
+    def supports(self, content_type: str) -> bool:
+        return content_type.startswith("image/")
+
+    def recognize(self, data: bytes, content_type: str) -> str:
+        return data.decode("utf-8", errors="replace")
+
+
+def _make_client(
+    db: Database, verifier: TokenVerifier, spans: InMemorySpanExporter, blobs: BlobStore
+) -> TestClient:
+    provider = TracerProvider()
+    provider.add_span_processor(ContextSpanProcessor())
+    provider.add_span_processor(SimpleSpanProcessor(spans))
+    app = create_app(
+        verifier=verifier, database=db, blobs=blobs, ocr=FakeOcr(), tracer_provider=provider
+    )
+    return TestClient(app)
+
+
 @pytest.fixture
 def client(
     db: Database, verifier: TokenVerifier, spans: InMemorySpanExporter
 ) -> Iterator[TestClient]:
-    provider = TracerProvider()
-    provider.add_span_processor(ContextSpanProcessor())
-    provider.add_span_processor(SimpleSpanProcessor(spans))
-    app = create_app(verifier=verifier, database=db, tracer_provider=provider)
-    with TestClient(app) as test_client:
+    """The API with in-memory source storage (no Azurite needed)."""
+    with _make_client(db, verifier, spans, InMemoryBlobStore()) as test_client:
+        yield test_client
+
+
+@pytest.fixture
+def intake_client(
+    db: Database, verifier: TokenVerifier, spans: InMemorySpanExporter, blob_store: AzureBlobStore
+) -> Iterator[TestClient]:
+    """The API with real immutable source storage (Azurite)."""
+    with _make_client(db, verifier, spans, blob_store) as test_client:
         yield test_client
 
 
@@ -137,3 +168,38 @@ def case_ops() -> Callable[..., list[dict[str, Any]]]:
 @pytest.fixture(scope="session")
 def op() -> Callable[[str, Any], dict[str, Any]]:
     return set_op
+
+
+# ---------------------------------------------------------------- intake helpers
+
+
+def build_pdf(lines: list[str]) -> bytes:
+    """A minimal one-page PDF with real (extractable) text."""
+    content = (
+        "BT /F1 12 Tf 72 720 Td 14 TL " + " ".join(f"({line}) Tj T*" for line in lines) + " ET"
+    )
+    objects = [
+        "<< /Type /Catalog /Pages 2 0 R >>",
+        "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R "
+        "/Resources << /Font << /F1 5 0 R >> >> >>",
+        f"<< /Length {len(content)} >>\nstream\n{content}\nendstream",
+        "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    ]
+    out = b"%PDF-1.4\n"
+    offsets = []
+    for number, body in enumerate(objects, start=1):
+        offsets.append(len(out))
+        out += f"{number} 0 obj\n{body}\nendobj\n".encode("latin-1")
+    xref = len(out)
+    out += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode()
+    out += "".join(f"{offset:010d} 00000 n \n" for offset in offsets).encode()
+    out += (
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    )
+    return out
+
+
+@pytest.fixture(scope="session")
+def make_pdf() -> Callable[[list[str]], bytes]:
+    return build_pdf

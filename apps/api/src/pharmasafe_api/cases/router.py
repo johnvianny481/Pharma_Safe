@@ -32,6 +32,7 @@ from pharmasafe_domain.provenance import Tracked
 from pharmasafe_domain.rules.checks import Issue, approval_blockers, check_case
 from pharmasafe_domain.rules.seriousness import case_is_serious
 from pharmasafe_domain.rules.validity import assess_validity
+from pharmasafe_platform.audit import Actor
 from pharmasafe_platform.auth import AuthenticationError, AuthorizationError, Principal, Role
 from pharmasafe_platform.context import current_case_id
 from pharmasafe_platform.signatures import ReauthenticationRequired, ReauthenticationReused
@@ -198,7 +199,12 @@ def create(
     changes = _to_changes(SafetyCase(), body.changes, principal, ctx.now)
     with _errors():
         case, version = service.create_case(
-            session, principal, SafetyCase(), ctx, reason=body.reason
+            session,
+            principal.require_tenant(),
+            Actor.from_principal(principal),
+            SafetyCase(),
+            ctx,
+            reason=body.reason,
         )
         if changes:
             service.apply_changes(

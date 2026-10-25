@@ -15,8 +15,9 @@ The full product architecture and phased build plan are in [`PharmaSafe Product 
 | 0 | Foundations: monorepo, tooling, local stack, CI | **Done** |
 | 1 | Identity, tenancy, audit, e-signatures | **Done** |
 | 2 | Case domain | **Done** |
-| 3 | Intake | Next |
-| 4–10 | Workflow → validation pack | Planned |
+| 3 | Intake | **Done** |
+| 4 | Workflow | Next |
+| 5–10 | AI pipeline → validation pack | Planned |
 
 ## Repository layout
 

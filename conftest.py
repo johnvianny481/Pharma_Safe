@@ -11,6 +11,7 @@ Without it, database tests are skipped locally and fail in CI.
 
 import os
 import secrets
+import socket
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -29,6 +30,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
 from pharmasafe_platform.auth import Principal, TokenVerifier, principal_from_claims
+from pharmasafe_platform.blobstore import AzureBlobStore, BlobError
 from pharmasafe_platform.db import Database
 
 ROOT = Path(__file__).parent
@@ -42,11 +44,21 @@ class _TestEnv(BaseSettings):
         env_prefix="PHARMASAFE_", env_file=ROOT / ".env", extra="ignore"
     )
     test_admin_database_url: str | None = None
+    # Azurite and GreenMail, as started by `make up` (and by CI service containers).
+    test_blob_endpoint: str = "http://127.0.0.1:10000/devstoreaccount1"
+    test_blob_account: str = "devstoreaccount1"
+    # Azurite's well-known development key (public; works only against the emulator).
+    test_blob_key: str = (
+        "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="
+    )
+    test_imap_host: str = "localhost"
+    test_imap_port: int = 3143
+    test_smtp_port: int = 3025
 
 
 def _unavailable(reason: str) -> None:
     if os.environ.get("CI"):
-        pytest.fail(f"database tests must run in CI: {reason}")
+        pytest.fail(f"integration tests must run in CI: {reason}")
     pytest.skip(reason)
 
 
@@ -210,3 +222,44 @@ def make_principal() -> PrincipalFactory:
         return principal_from_claims(default_claims(**overrides))
 
     return build
+
+
+# ---------------------------------------------------------------- blob storage and mail
+
+
+@pytest.fixture(scope="session")
+def blob_store() -> Iterator[AzureBlobStore]:
+    """Azurite, with a fresh container per test session."""
+    env = _TestEnv()
+    store = AzureBlobStore(
+        env.test_blob_endpoint,
+        env.test_blob_account,
+        env.test_blob_key,
+        f"test-{secrets.token_hex(4)}",
+        timeout=5,
+    )
+    try:
+        store.ensure_container()
+    except BlobError as exc:
+        store.close()
+        _unavailable(f"cannot reach Azurite: {exc}")
+    yield store
+    store.close()
+
+
+@dataclass(frozen=True)
+class MailServer:
+    host: str
+    imap_port: int
+    smtp_port: int
+
+
+@pytest.fixture(scope="session")
+def mail_server() -> MailServer:
+    env = _TestEnv()
+    server = MailServer(env.test_imap_host, env.test_imap_port, env.test_smtp_port)
+    try:
+        socket.create_connection((server.host, server.smtp_port), timeout=3).close()
+    except OSError as exc:
+        _unavailable(f"cannot reach GreenMail: {exc}")
+    return server

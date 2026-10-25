@@ -58,3 +58,21 @@ Risk: **H** means it affects patient safety or regulatory submissions and gets f
 | OUT-01 | An event commits or rolls back with its change | H | `packages/platform/tests/test_outbox_db.py::test_event_commits_or_rolls_back_with_the_change` |
 | OUT-02 | Events are relayed in order per tenant, once on success, and retried after failure without overtaking | H | `test_outbox_db.py`: `test_relay_publishes_each_tenants_events_in_order_once`, `test_failed_publish_is_recorded_and_later_events_wait`, `test_app_role_can_only_mark_events_published` |
 | OBS-02 | Case request spans carry case_id and tenant_id | L | `test_cases_api.py::test_case_spans_carry_case_id` |
+
+## Phase 3: intake
+
+| ID | Requirement | Risk | Evidence (tests) |
+|---|---|---|---|
+| INT-01 | The same email processed twice creates one case, including after re-delivery and a crash before it is marked seen | H | `apps/api/tests/test_email_intake.py`: `test_the_same_email_processed_twice_creates_one_case`, `test_redelivered_email_with_extra_headers_is_still_one_case`, `test_poller_reads_each_mailbox_message_into_one_case` (GreenMail) |
+| INT-02 | Every intake endpoint needs an idempotency key; a repeat creates nothing; a reused key with other content is refused | H | `apps/api/tests/test_intake_api.py`: `test_report_with_the_same_key_creates_one_case`, `test_reusing_a_key_for_different_content_is_refused`, `test_intake_endpoints_require_an_idempotency_key` |
+| INT-03 | Every source document is retrievable byte for byte, verified against its SHA-256 | H | `test_intake_api.py::test_uploaded_files_are_retrievable_byte_for_byte`; `test_email_intake.py::test_email_sources_are_kept_exactly`; `packages/platform/tests/test_blobstore.py::test_any_bytes_come_back_exactly` (Azurite, property-based) |
+| INT-04 | Sources are immutable: never overwritten, tampering detected, records append-only | H | `test_blobstore.py`: `test_a_stored_blob_is_never_overwritten`, `test_reading_checks_the_recorded_hash`, `test_wrong_key_is_refused`; `test_intake_api.py::test_source_records_are_append_only` |
+| INT-05 | Intake is audited with the hashes of all sources and announced through the outbox | H | `test_intake_api.py::test_intake_is_audited_with_source_hashes_and_announced` |
+| INT-06 | Sources are isolated by tenant and data scope; downloads are never rendered inline | H | `test_intake_api.py`: `test_sources_are_isolated_by_tenant_and_scope`, `test_uploaded_files_are_retrievable_byte_for_byte` |
+| INT-07 | Intake endpoints enforce roles | H | `test_intake_api.py::test_intake_needs_an_intake_role` |
+| INT-08 | A document holding several reports becomes one case per report, each linked to its span | H | `test_intake_api.py::test_a_document_with_several_reports_becomes_several_cases`; `apps/api/tests/test_intake_text.py` (splitting, property-based) |
+| INT-09 | Form fields become case values entered by the intake user; the system receipt date needs confirmation | H | `test_intake_api.py::test_form_fields_become_case_values_entered_by_the_intake_user` |
+| INT-10 | Text extraction for plain text, HTML, PDF and images (OCR interface); other types are kept for manual entry | L | `test_intake_text.py` (extraction tests) |
+| INT-11 | Language detection for common report languages; undetermined rather than guessed | L | `test_intake_text.py`: `test_detects_common_report_languages`, `test_short_or_unclear_text_is_undetermined` |
+| INT-12 | Email is stored as the raw message plus body and attachments | H | `test_intake_text.py::test_email_becomes_raw_message_body_and_attachments` |
+| UI-01 | The web form sends one idempotency key per report and reuses it on retry | H | `apps/review_ui/src/IntakeForm.test.tsx` |

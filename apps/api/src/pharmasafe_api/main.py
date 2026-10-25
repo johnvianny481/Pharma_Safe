@@ -1,15 +1,20 @@
 """ASGI entrypoint: ``uvicorn pharmasafe_api.main:app``."""
 
+from datetime import timedelta
+
 from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 
 from pharmasafe_api.audit.router import router as audit_router
+from pharmasafe_api.cases.router import router as cases_router
 from pharmasafe_api.identity.router import router as identity_router
+from pharmasafe_domain.rules.clocks import seed_registry
 from pharmasafe_platform.auth import TokenVerifier, jwks_key_resolver
 from pharmasafe_platform.db import Database
 from pharmasafe_platform.logging import configure_logging
 from pharmasafe_platform.settings import Settings, get_settings
+from pharmasafe_platform.signatures import SignatureService
 from pharmasafe_platform.telemetry import configure_tracing
 
 SERVICE_NAME = "api"
@@ -35,6 +40,11 @@ def create_app(
     )
     # create_engine does not connect, so building the app needs no running database.
     app.state.database = database or Database(settings.database_url)
+    app.state.signatures = SignatureService(
+        max_auth_age=timedelta(seconds=settings.signature_max_auth_age_seconds)
+    )
+    # Example rule sets for now; per-tenant configuration arrives with the admin screens.
+    app.state.clock_rules = seed_registry()
 
     @app.get("/healthz", tags=["ops"])
     def healthz() -> dict[str, str]:
@@ -42,6 +52,7 @@ def create_app(
 
     app.include_router(identity_router)
     app.include_router(audit_router)
+    app.include_router(cases_router)
 
     FastAPIInstrumentor.instrument_app(
         app,

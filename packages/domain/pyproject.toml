@@ -3,7 +3,9 @@ name = "pharmasafe-domain"
 version = "0.1.0"
 description = "E2B(R3)-aligned case model and deterministic safety rules (validity, seriousness, clocks)"
 requires-python = "==3.12.*"
-dependencies = []
+dependencies = [
+    "pydantic>=2.9",
+]
 
 [build-system]
 requires = ["hatchling>=1.25"]

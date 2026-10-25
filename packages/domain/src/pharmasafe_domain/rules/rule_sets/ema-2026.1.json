@@ -1,0 +1,42 @@
+{
+  "regulator": "EMA",
+  "version": "2026.1-example",
+  "effective_from": "2000-01-01",
+  "example": true,
+  "notice": "EXAMPLE rules for development and testing. Configurable; not regulatory advice. Regulatory affairs must review and configure them before any real use.",
+  "domestic_countries": ["AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE", "IS", "LI", "NO"],
+  "rules": [
+    {
+      "id": "icsr-serious",
+      "description": "Serious ICSR, EEA and non-EEA, to EudraVigilance within 15 days (GVP Module VI)",
+      "setting": "postmarketing",
+      "seriousness": "serious",
+      "due_in_days": 15
+    },
+    {
+      "id": "icsr-non-serious-eea",
+      "description": "Non-serious EEA ICSR to EudraVigilance within 90 days (GVP Module VI)",
+      "setting": "postmarketing",
+      "seriousness": "non_serious",
+      "occurrence": "domestic",
+      "due_in_days": 90
+    },
+    {
+      "id": "susar-7-day",
+      "description": "Fatal or life-threatening SUSAR within 7 days (Regulation (EU) No 536/2014, Art. 42)",
+      "setting": "study",
+      "seriousness": "serious",
+      "unexpected_only": true,
+      "fatal_or_life_threatening_only": true,
+      "due_in_days": 7
+    },
+    {
+      "id": "susar-15-day",
+      "description": "Other SUSAR within 15 days (Regulation (EU) No 536/2014, Art. 42)",
+      "setting": "study",
+      "seriousness": "serious",
+      "unexpected_only": true,
+      "due_in_days": 15
+    }
+  ]
+}

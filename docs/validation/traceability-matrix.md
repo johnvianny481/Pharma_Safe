@@ -30,3 +30,31 @@ Risk: **H** means it affects patient safety or regulatory submissions and gets f
 | SIG-04 | Only authorised roles can apply each signature meaning | H | `test_signatures_db.py`: `test_role_must_match_meaning`, `test_medical_reviewer_can_medically_approve` |
 | SIG-05 | Signatures are immutable and audited | H | `test_signatures_db.py`: `test_signatures_are_immutable`, `test_signing_writes_an_audit_entry` |
 | OBS-01 | Logs and spans carry tenant_id; logs never include unlisted fields | L | `test_api_auth.py::test_request_spans_carry_tenant_id`; `test_logging.py` |
+
+## Phase 2: case domain
+
+| ID | Requirement | Risk | Evidence (tests) |
+|---|---|---|---|
+| CAS-01 | Case model mirrors the main E2B(R3) sections and rejects structurally impossible values | H | `packages/domain/tests/test_case_model.py` |
+| CAS-02 | Every field stores value, source, evidence span, confidence, confirmed_by, confirmed_at; AI values need evidence and confidence | H | `packages/domain/tests/test_provenance.py` |
+| CAS-03 | Clients cannot set provenance; API values are human and confirmed by the caller; confirm keeps the value and evidence | H | `apps/api/tests/test_cases_api.py`: `test_values_entered_through_the_api_are_human_and_confirmed`, `test_clients_cannot_forge_provenance`, `test_confirm_keeps_the_value_and_records_the_confirmer` |
+| CAS-04 | Approved versions are immutable for every role; versions are never deleted | H | `test_cases_api.py::test_approved_version_is_immutable` |
+| CAS-05 | Follow-up information creates a new version and leaves the approved one unchanged | H | `test_cases_api.py::test_follow_up_creates_a_new_version_and_leaves_the_approved_one_intact` |
+| CAS-06 | A past case version can be rebuilt exactly, as it was at any moment, from the audit trail | H | `apps/api/tests/test_case_rebuild_db.py::test_every_past_state_rebuilds_exactly` (property-based); `test_cases_api.py::test_past_version_is_rebuilt_exactly_from_the_audit_trail`; `packages/domain/tests/test_changes.py` |
+| CAS-07 | Concurrent edits cannot overwrite each other; invalid changes apply nothing | H | `test_cases_api.py`: `test_stale_revision_is_rejected`, `test_invalid_changes_are_rejected_atomically` |
+| CAS-08 | Every case operation is audited in the hash chain, with field, old and new value, reason and case version | H | `test_cases_api.py::test_every_case_operation_is_audited_in_a_valid_chain` |
+| CAS-09 | Approval requires an e-signature with fresh re-authentication, an approver role, and no blockers | H | `test_cases_api.py`: `test_approval_needs_the_right_role_and_a_fresh_reauthentication`, `test_incomplete_case_is_invalid_and_cannot_be_approved`; `packages/domain/tests/test_checks.py` |
+| VAL-01 | Validity requires the four minimum criteria | H | `packages/domain/tests/test_validity.py` (property-based, against an independent oracle) |
+| CHK-01 | Date checks flag only definite contradictions (future, before 1900, end before start, before birth, receipt order) | H | `packages/domain/tests/test_checks.py`, `test_dates.py` |
+| CHK-02 | Unit and range checks (age, weight, height, dose units, test ranges) | L | `test_checks.py` |
+| CLK-01 | Day 0 is the receipt date of the first valid state and is never changed | H | `packages/domain/tests/test_clocks.py::test_day_zero_is_first_valid_receipt`, `test_no_clock_starts_before_day_zero`; `test_cases_api.py::test_day_zero_and_clocks_cannot_be_reset` |
+| CLK-02 | Due dates come from versioned rule sets per regulator; the set in force at clock start applies | H | `test_clocks.py`: `test_due_date_is_clock_start_plus_the_rule_period`, `test_rule_set_in_force_on_the_clock_start_applies` |
+| CLK-03 | Seeded rules are clearly marked as configurable examples | H | `test_clocks.py::test_seeded_rule_sets_are_marked_as_examples` |
+| CLK-04 | Clocks never reset; later information can only start new clocks | H | `test_clocks.py`: `test_clocks_never_reset_as_information_arrives`, `test_resuming_from_stored_clocks_matches_a_full_evaluation`, `test_follow_up_that_makes_a_case_serious_starts_a_new_clock` |
+| CLK-05 | Unknown report type, country or expectedness is treated as reportable | H | `test_clocks.py`: `test_unknown_country_is_treated_as_domestic_and_foreign`, `test_unknown_report_type_matches_both_settings`, `test_unassessed_expectedness_counts_as_unexpected` |
+| TEN-06 | Cases are isolated between tenants through the API | H | `test_cases_api.py::test_cases_are_isolated_between_tenants`; `test_tenant_isolation_db.py::test_every_tenant_table_has_forced_rls` |
+| IAM-06 | Data scopes by product and region filter cases and fail closed | H | `test_cases_api.py::test_data_scopes_limit_which_cases_a_user_sees` |
+| IAM-07 | Case endpoints enforce roles | H | `test_cases_api.py::test_roles_are_enforced` |
+| OUT-01 | An event commits or rolls back with its change | H | `packages/platform/tests/test_outbox_db.py::test_event_commits_or_rolls_back_with_the_change` |
+| OUT-02 | Events are relayed in order per tenant, once on success, and retried after failure without overtaking | H | `test_outbox_db.py`: `test_relay_publishes_each_tenants_events_in_order_once`, `test_failed_publish_is_recorded_and_later_events_wait`, `test_app_role_can_only_mark_events_published` |
+| OBS-02 | Case request spans carry case_id and tenant_id | L | `test_cases_api.py::test_case_spans_carry_case_id` |

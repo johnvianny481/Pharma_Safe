@@ -36,6 +36,19 @@ Every user's password is `KC_DEMO_USER_PASSWORD` from `.env`. Tenant ids match `
 
 The Keycloak admin console is at http://localhost:8180, with the admin user from `.env`.
 
+## Case API
+
+The OpenAPI docs are at http://localhost:8000/docs once the API is running. A case's life:
+
+1. `POST /cases` with `changes` (a case processor or intake processor).
+2. `PATCH /cases/{id}/versions/1` with `expected_revision` and more `changes`. Operations are `set`, `confirm`, `add` and `remove` on paths such as `/patient/initials`, `/reactions`, `/reactions/r1/seriousness/death`.
+3. `GET /cases/{id}/versions/1/assessment` shows validity, seriousness, date and unit issues, approval blockers, day 0 and regulatory clocks.
+4. `POST /cases/{id}/versions/1/approve` (a quality or medical reviewer) with `reauth_token`, which is an access token from a fresh login.
+5. `POST /cases/{id}/follow-ups` with the follow-up `receipt_date` creates version 2.
+6. `GET /cases/{id}/versions/1/rebuild?as_of=...` (a tenant admin or quality reviewer) rebuilds a version from the audit trail.
+
+Clock rules are configurable **examples** in `packages/domain/src/pharmasafe_domain/rules/rule_sets/` (ADR 0010). A tenant's regulators are in `tenants.regulators`, and the default is FDA and EMA.
+
 ## Database roles
 
 The API and workers connect as `pharmasafe_app_user`. It is a non-owner role, so row-level security always applies. Migrations and `seed` connect as the owner (`PHARMASAFE_MIGRATION_DATABASE_URL`). See ADR 0008.

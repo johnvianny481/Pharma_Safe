@@ -1,0 +1,25 @@
+{
+  "regulator": "CDSCO",
+  "version": "2026.1-example",
+  "effective_from": "2000-01-01",
+  "example": true,
+  "notice": "EXAMPLE rules for development and testing. Configurable; not regulatory advice. Regulatory affairs must review and configure them before any real use.",
+  "domestic_countries": ["IN"],
+  "rules": [
+    {
+      "id": "serious-adr-15-day",
+      "description": "Serious adverse drug reaction within 15 days (example, after PvPI guidance)",
+      "setting": "postmarketing",
+      "seriousness": "serious",
+      "due_in_days": 15
+    },
+    {
+      "id": "trial-sae-14-day",
+      "description": "Serious adverse event in a clinical trial in India within 14 days (example, after NDCT Rules 2019)",
+      "setting": "study",
+      "seriousness": "serious",
+      "occurrence": "domestic",
+      "due_in_days": 14
+    }
+  ]
+}

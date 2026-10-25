@@ -14,8 +14,9 @@ The full product architecture and phased build plan are in [`PharmaSafe Product 
 |---|---|---|
 | 0 | Foundations: monorepo, tooling, local stack, CI | **Done** |
 | 1 | Identity, tenancy, audit, e-signatures | **Done** |
-| 2 | Case domain | Next |
-| 3–10 | Intake → validation pack | Planned |
+| 2 | Case domain | **Done** |
+| 3 | Intake | Next |
+| 4–10 | Workflow → validation pack | Planned |
 
 ## Repository layout
 
@@ -29,7 +30,7 @@ apps/
   review_ui/          React + TypeScript + Vite + TanStack Query SPA
 packages/
   domain/             E2B-aligned case model and deterministic rules (pure, mypy strict, 85% coverage)
-  platform/           Settings, JSON logging; later auth, tenancy, audit, telemetry, outbox
+  platform/           Settings, JSON logging, auth, tenancy, audit, e-signatures, telemetry, outbox
 eval/                 Datasets, harness and reports for AI evaluation (Phase 8)
 tools/synthetic_data/ Synthetic report generator (Phase 8)
 infra/terraform, infra/helm   Azure infrastructure (Phase 10)

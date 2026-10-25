@@ -1,0 +1,35 @@
+{
+  "regulator": "FDA",
+  "version": "2026.1-example",
+  "effective_from": "2000-01-01",
+  "example": true,
+  "notice": "EXAMPLE rules for development and testing. Configurable; not regulatory advice. Regulatory affairs must review and configure them before any real use.",
+  "domestic_countries": ["US"],
+  "rules": [
+    {
+      "id": "postmarketing-15-day-alert",
+      "description": "Postmarketing 15-day alert report: serious and unexpected (21 CFR 314.80(c)(1))",
+      "setting": "postmarketing",
+      "seriousness": "serious",
+      "unexpected_only": true,
+      "due_in_days": 15
+    },
+    {
+      "id": "ind-7-day",
+      "description": "IND safety report: unexpected fatal or life-threatening suspected adverse reaction (21 CFR 312.32(c)(2))",
+      "setting": "study",
+      "seriousness": "serious",
+      "unexpected_only": true,
+      "fatal_or_life_threatening_only": true,
+      "due_in_days": 7
+    },
+    {
+      "id": "ind-15-day",
+      "description": "IND safety report: serious and unexpected suspected adverse reaction (21 CFR 312.32(c)(1))",
+      "setting": "study",
+      "seriousness": "serious",
+      "unexpected_only": true,
+      "due_in_days": 15
+    }
+  ]
+}

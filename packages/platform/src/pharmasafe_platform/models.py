@@ -8,8 +8,8 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, DateTime, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import BigInteger, DateTime, Identity, Integer, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -24,6 +24,7 @@ class TenantRow(Base):
     slug: Mapped[str] = mapped_column(String(64), unique=True)
     name: Mapped[str] = mapped_column(String(200))
     region: Mapped[str] = mapped_column(String(8))
+    regulators: Mapped[list[str]] = mapped_column(ARRAY(Text))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
@@ -65,3 +66,19 @@ class ESignatureRow(Base):
     auth_time: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     reauth_token_id: Mapped[str] = mapped_column(Text)
     signature_hash: Mapped[str] = mapped_column(String(64))
+
+
+class OutboxRow(Base):
+    __tablename__ = "outbox"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    seq: Mapped[int] = mapped_column(BigInteger, Identity(always=True), unique=True)
+    tenant_id: Mapped[UUID]
+    topic: Mapped[str] = mapped_column(Text)
+    event_type: Mapped[str] = mapped_column(Text)
+    aggregate_id: Mapped[str] = mapped_column(Text)
+    payload: Mapped[Any] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)

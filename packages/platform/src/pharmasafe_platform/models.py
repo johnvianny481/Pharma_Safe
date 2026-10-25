@@ -28,6 +28,7 @@ class TenantRow(Base):
     regulators: Mapped[list[str]] = mapped_column(ARRAY(Text))
     intake_mailbox: Mapped[str | None] = mapped_column(Text)
     qc_sample_rate: Mapped[Decimal] = mapped_column(Numeric(4, 3))
+    ai_automation_level: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 

@@ -414,6 +414,30 @@ def documents_of(session: Session, submission_id: UUID) -> Sequence[SourceDocume
     ).all()
 
 
+@dataclass(frozen=True)
+class CaseSource:
+    """The report text a case came from: a span of one source document's text."""
+
+    document_id: UUID
+    text: str
+    # Where ``text`` starts in the document text, so evidence offsets can point there.
+    offset: int
+
+
+def source_of_case(session: Session, case_id: UUID) -> CaseSource | None:
+    """The case's report text, or None if it came with no readable text."""
+    report = session.scalars(
+        select(IntakeReportRow).where(IntakeReportRow.case_id == case_id)
+    ).first()
+    if report is None or report.document_id is None or report.text_start is None:
+        return None
+    document = session.get(DocumentTextRow, report.document_id)
+    if document is None or report.text_end is None:
+        return None
+    text = document.text[report.text_start : report.text_end]
+    return CaseSource(report.document_id, text, report.text_start) if text.strip() else None
+
+
 def texts_of(session: Session, document_ids: Sequence[UUID]) -> dict[UUID, DocumentTextRow]:
     rows = session.scalars(
         select(DocumentTextRow).where(DocumentTextRow.document_id.in_(document_ids))

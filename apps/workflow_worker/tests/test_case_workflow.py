@@ -19,6 +19,12 @@ from temporalio.client import WorkflowHistory
 from temporalio.testing import WorkflowEnvironment
 from temporalio.worker import Replayer
 
+from pharmasafe_api.cases import ai as case_ai
+from pharmasafe_api.cases import service as cases
+from pharmasafe_api.intake import service as intake
+from pharmasafe_domain.rules.clocks import seed_registry
+from pharmasafe_platform.audit import Actor
+from pharmasafe_platform.blobstore import InMemoryBlobStore
 from pharmasafe_workflow_worker.activities import CaseActivities
 from pharmasafe_workflow_worker.contracts import OpenTaskRequest
 from pharmasafe_workflow_worker.workflows import WORKFLOW_VERSION, CaseWorkflow
@@ -122,6 +128,49 @@ def test_returned_or_edited_case_goes_back_to_data_entry(
                 "approval",
                 "data_entry",
             ]
+
+    run(driver_factory, scenario)
+
+
+def test_a_report_is_prefilled_by_the_ai_pipeline_before_data_entry(
+    driver_factory: Any, db: Any
+) -> None:
+    """Intake text -> case workflow -> AI child workflow -> data entry, then a narrative."""
+    report = (
+        "Reporter: Dr Maria Silva. Patient JD, a 64-year-old man, developed a severe rash on"
+        " 2026-10-01 after starting Acmezol 20 mg. He was hospitalised."
+    )
+
+    async def scenario(d: Any, env: WorkflowEnvironment) -> None:
+        submission = intake.Submission(
+            channel=intake.Channel.API, external_id="wf-ai-1",
+            request_hash=intake.request_hash(report),
+            documents=[intake.IncomingDocument("text", "text/plain", report.encode(), text=report)],
+        )  # fmt: skip
+        deps = intake.IntakeDeps(InMemoryBlobStore(), None, seed_registry())
+        with db.tenant_session(d.tenant) as session:
+            (case_id,) = intake.ingest(
+                session, d.tenant, Actor("intake-1", "Intake"), submission, deps
+            ).case_ids
+        async with d.worker():
+            await d.stage_becomes(case_id, "data_entry_review")
+            with db.tenant_session(d.tenant) as session:
+                content = cases.case_of(cases.get_version(session, case_id, 1))
+                pipeline = case_ai.run_of(session, case_id, 1, case_ai.PIPELINE)
+            assert pipeline is not None
+            assert pipeline.automation_level == "L1"
+            (drug,) = content.drugs
+            assert drug.product_name is not None
+            assert (drug.product_name.value, drug.product_name.source.value) == ("Acmezol", "ai")
+
+            d.edit(case_id, "/patient/weight_kg", "80")  # a person enters and confirms one fact
+            d.complete(d.open_task(case_id))
+            # Serious by both signals: quality and medical review follow data entry.
+            await d.stage_becomes(case_id, "quality_medical_review")
+            with db.tenant_session(d.tenant) as session:
+                narrative = case_ai.run_of(session, case_id, 1, case_ai.NARRATIVE)
+            assert narrative is not None
+            assert "/patient/weight_kg: 80" in narrative.result["draft"]
 
     run(driver_factory, scenario)
 

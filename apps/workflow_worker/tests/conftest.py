@@ -3,8 +3,9 @@ and a small driver that plays the outbox relay and the people working the tasks.
 
 import asyncio
 import time
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -15,6 +16,9 @@ from sqlalchemy import select, text
 from temporalio.client import Client, WorkflowHandle
 from temporalio.worker import Worker
 
+from pharmasafe_ai_worker.activities import Deps, PipelineActivities
+from pharmasafe_ai_worker.contracts import TASK_QUEUE as AI_TASK_QUEUE
+from pharmasafe_ai_worker.workflows import CasePipelineWorkflow
 from pharmasafe_api.cases import service as cases
 from pharmasafe_api.cases.models import CaseClockRow, CaseRow
 from pharmasafe_api.review import service as review
@@ -92,18 +96,32 @@ class Driver:
     tenant: UUID
     make_principal: Callable[..., Principal]
     executor: ThreadPoolExecutor
+    ai: Deps
 
-    def worker(
+    @asynccontextmanager
+    async def worker(
         self, activities: list[Callable[..., Any]] | None = None, *, cache: bool = True
-    ) -> Worker:
-        return Worker(
+    ) -> AsyncIterator[None]:
+        """The case workflow worker and the AI pipeline worker (MockLLM gateway)."""
+        cached = 1000 if cache else 0
+        case_worker = Worker(
             self.client,
             task_queue=TASK_QUEUE,
             workflows=[CaseWorkflow],
             activities=activities if activities is not None else CaseActivities(self.db).all(),
             activity_executor=self.executor,
-            max_cached_workflows=1000 if cache else 0,
+            max_cached_workflows=cached,
         )
+        ai_worker = Worker(
+            self.client,
+            task_queue=AI_TASK_QUEUE,
+            workflows=[CasePipelineWorkflow],
+            activities=PipelineActivities(self.ai).all(),
+            activity_executor=self.executor,
+            max_cached_workflows=cached,
+        )
+        async with case_worker, ai_worker:
+            yield
 
     def person(self, sub: str, role: str) -> Principal:
         return self.make_principal(sub=sub, tenant_id=str(self.tenant), roles=[role])
@@ -262,9 +280,12 @@ def no_qc_sampling(owner_engine: Any, tenant_a: UUID) -> None:
 
 @pytest.fixture
 def driver_factory(
-    db: Database, tenant_a: UUID, make_principal: Callable[..., Principal]
+    db: Database,
+    tenant_a: UUID,
+    make_principal: Callable[..., Principal],
+    pipeline_deps: Deps,
 ) -> Callable[[Client, ThreadPoolExecutor], Driver]:
     def build(client: Client, executor: ThreadPoolExecutor) -> Driver:
-        return Driver(client, db, tenant_a, make_principal, executor)
+        return Driver(client, db, tenant_a, make_principal, executor, pipeline_deps)
 
     return build

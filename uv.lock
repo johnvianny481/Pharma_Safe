@@ -1087,6 +1087,8 @@ version = "0.1.0"
 source = { editable = "apps/ai_gateway" }
 dependencies = [
     { name = "fastapi" },
+    { name = "httpx" },
+    { name = "pharmasafe-domain" },
     { name = "pharmasafe-platform" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -1094,6 +1096,8 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.28" },
+    { name = "pharmasafe-domain", editable = "packages/domain" },
     { name = "pharmasafe-platform", editable = "packages/platform" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.32" },
 ]
@@ -1103,14 +1107,20 @@ name = "pharmasafe-ai-worker"
 version = "0.1.0"
 source = { editable = "apps/ai_worker" }
 dependencies = [
+    { name = "pharmasafe-ai-gateway" },
+    { name = "pharmasafe-api" },
     { name = "pharmasafe-domain" },
     { name = "pharmasafe-platform" },
+    { name = "temporalio" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "pharmasafe-ai-gateway", editable = "apps/ai_gateway" },
+    { name = "pharmasafe-api", editable = "apps/api" },
     { name = "pharmasafe-domain", editable = "packages/domain" },
     { name = "pharmasafe-platform", editable = "packages/platform" },
+    { name = "temporalio", specifier = ">=1.9" },
 ]
 
 [[package]]
@@ -1156,6 +1166,7 @@ name = "pharmasafe-platform"
 version = "0.1.0"
 source = { editable = "packages/platform" }
 dependencies = [
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-exporter-otlp-proto-http" },
@@ -1169,6 +1180,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=44" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "opentelemetry-api", specifier = ">=1.28" },
     { name = "opentelemetry-exporter-otlp-proto-http", specifier = ">=1.28" },
@@ -1200,6 +1212,7 @@ name = "pharmasafe-workflow-worker"
 version = "0.1.0"
 source = { editable = "apps/workflow_worker" }
 dependencies = [
+    { name = "pharmasafe-ai-worker" },
     { name = "pharmasafe-api" },
     { name = "pharmasafe-domain" },
     { name = "pharmasafe-platform" },
@@ -1208,6 +1221,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "pharmasafe-ai-worker", editable = "apps/ai_worker" },
     { name = "pharmasafe-api", editable = "apps/api" },
     { name = "pharmasafe-domain", editable = "packages/domain" },
     { name = "pharmasafe-platform", editable = "packages/platform" },

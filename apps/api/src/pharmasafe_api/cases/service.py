@@ -24,7 +24,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import ColumnElement, func, select, text, true
 from sqlalchemy.orm import Session
 
-from pharmasafe_api.cases.models import CaseClockRow, CaseRow, CaseVersionRow
+from pharmasafe_api.cases.models import CaseAiRunRow, CaseClockRow, CaseRow, CaseVersionRow
 from pharmasafe_domain.case import DrugRole, SafetyCase, normalise
 from pharmasafe_domain.changes import AddItem, ChangeError, RemoveItem, SetField, apply_change
 from pharmasafe_domain.provenance import Tracked
@@ -55,6 +55,8 @@ ENTITY = "case"
 TOPIC = "cases"
 DRAFT = "draft"
 APPROVED = "approved"
+# Flag on a pipeline run: either seriousness signal (LLM or rules) found the case serious.
+SERIOUS_BY_SIGNALS = "serious_by_signals"
 
 VERSION_CREATED = "case.version_created"
 CHANGE_ACTIONS = {"set": "case.field_set", "add": "case.item_added", "remove": "case.item_removed"}
@@ -215,6 +217,47 @@ def apply_changes(
     reason: str | None = None,
 ) -> CaseVersionRow:
     """Apply changes to a draft, all or nothing, if nobody else changed it meanwhile."""
+    return _apply(
+        session,
+        case,
+        version_number,
+        expected_revision,
+        changes,
+        Actor.from_principal(principal),
+        ctx,
+        reason,
+    )
+
+
+def apply_system_changes(
+    session: Session,
+    case: CaseRow,
+    version_number: int,
+    *,
+    expected_revision: int,
+    changes: Sequence[Change],
+    actor: Actor,
+    ctx: CaseContext,
+    reason: str,
+) -> CaseVersionRow:
+    """Changes made by a system actor (the AI pipeline), audited like any other change.
+
+    The values themselves carry their source (``ai``) and stay unconfirmed until a person
+    confirms them, so this grants no shortcut to approval.
+    """
+    return _apply(session, case, version_number, expected_revision, changes, actor, ctx, reason)
+
+
+def _apply(
+    session: Session,
+    case: CaseRow,
+    version_number: int,
+    expected_revision: int,
+    changes: Sequence[Change],
+    actor: Actor,
+    ctx: CaseContext,
+    reason: str | None,
+) -> CaseVersionRow:
     version = get_version(session, case.id, version_number, for_update=True)
     if version.status != DRAFT:
         raise CaseConflict("approved versions are immutable; start a follow-up to change the case")
@@ -222,7 +265,6 @@ def apply_changes(
         raise CaseConflict(
             f"version {version_number} is at revision {version.revision}, not {expected_revision}"
         )
-    actor = Actor.from_principal(principal)
     current = case_of(version)
     for change in changes:
         try:
@@ -335,7 +377,17 @@ def sign_review(
 def review_plan_of(session: Session, case: CaseRow, version: CaseVersionRow) -> ReviewPlan:
     tenant = session.get_one(TenantRow, case.tenant_id)
     sampled = qc_sampled(str(case.id), version.version, tenant.qc_sample_rate)
-    return review_plan(case_of(version), sampled=sampled)
+    # A case the AI signals found serious is reviewed as serious, even at L0 where the
+    # criteria are not written into the case (dual-signal rule, ADR 0014).
+    flags = session.scalar(
+        select(CaseAiRunRow.flags).where(
+            CaseAiRunRow.case_id == case.id,
+            CaseAiRunRow.case_version == version.version,
+            CaseAiRunRow.kind == "pipeline",
+        )
+    )
+    flagged = SERIOUS_BY_SIGNALS in (flags or [])
+    return review_plan(case_of(version), sampled=sampled, flagged_serious=flagged)
 
 
 def review_signatures(session: Session, case_id: UUID, version: int) -> list[SignatureFact]:

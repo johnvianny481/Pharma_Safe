@@ -11,6 +11,9 @@ from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanE
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import DBAPIError
 
+from pharmasafe_api.cases import ai as case_ai
+from pharmasafe_api.cases.models import CaseRow
+from pharmasafe_domain.ai.automation import Level
 from pharmasafe_platform.audit import verify_chain
 from pharmasafe_platform.db import Database
 from pharmasafe_platform.signatures import content_hash
@@ -341,3 +344,38 @@ def test_day_zero_and_clocks_cannot_be_reset(
         db.tenant_session(cases_api.tenant) as s,
     ):
         s.execute(text("UPDATE cases SET case_number = 'X' WHERE id = :c"), {"c": case["id"]})
+
+
+def test_ai_runs_are_readable_by_reviewers_and_isolated_by_tenant(
+    cases_api: Any, db: Database, tenant_b: UUID
+) -> None:
+    case = cases_api.create([])
+    with db.tenant_session(cases_api.tenant) as session:
+        row = session.get_one(CaseRow, UUID(case["id"]))
+        recorded = case_ai.record_run(
+            session, row, 1, kind=case_ai.PIPELINE, bundle_version="mock-2026.10.1",
+            status="completed", level=Level.L0, flags=["low_confidence"],
+            result={"proposals": [{"op": "set", "path": "/patient/sex"}]},
+            now=datetime.now(UTC),
+        )  # fmt: skip
+        again = case_ai.record_run(
+            session, row, 1, kind=case_ai.PIPELINE, bundle_version="other", status="completed",
+            level=Level.L1, flags=[], result={}, now=datetime.now(UTC),
+        )  # fmt: skip
+    assert (recorded, again) == (True, False)  # once per version and kind
+
+    response = cases_api.client.get(
+        f"/cases/{case['id']}/versions/1/ai", headers=cases_api.headers(roles=["quality_reviewer"])
+    )
+    assert response.status_code == 200, response.text
+    (run,) = response.json()
+    assert (run["kind"], run["automation_level"], run["bundle_version"]) == (
+        "pipeline", "L0", "mock-2026.10.1",
+    )  # fmt: skip
+    assert run["result"]["proposals"][0]["path"] == "/patient/sex"
+
+    other = cases_api.client.get(
+        f"/cases/{case['id']}/versions/1/ai",
+        headers=cases_api.headers(tenant_id=str(tenant_b)),
+    )
+    assert other.status_code == 404

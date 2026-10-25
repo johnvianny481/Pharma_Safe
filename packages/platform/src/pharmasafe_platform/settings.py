@@ -59,6 +59,27 @@ class Settings(BaseSettings):
     # Tesseract executable for OCR of images; OCR is unavailable when it cannot be found.
     tesseract_cmd: str = "tesseract"
 
+    # AI configuration bundles (signed; see pharmasafe_platform.aiconfig). The active
+    # version applies to new pipeline runs; every case records the version it used.
+    ai_bundle_dir: str = "config/ai_bundles"
+    ai_bundle_version: str = "mock-2026.10.1"
+    # The AI gateway, the only path to LLM providers. Internal callers present this
+    # token; in Azure, mutual TLS between services replaces it (Phase 10).
+    ai_gateway_url: str = "http://localhost:8001"
+    ai_gateway_token: SecretStr = SecretStr("")
+    azure_openai_endpoint: str = ""
+    azure_openai_key: SecretStr = SecretStr("")
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_api_key: SecretStr = SecretStr("")
+    # Self-hosted Langfuse for redacted LLM call logging (disabled when keys are empty).
+    langfuse_host: str = "http://localhost:3000"
+    langfuse_public_key: str = ""
+    langfuse_secret_key: SecretStr = SecretStr("")
+    # Master key (base64, 32 bytes) for per-tenant encryption of redaction mappings.
+    # In Azure it comes from Key Vault.
+    redaction_key_id: str = "local-1"
+    redaction_master_key: SecretStr = SecretStr("")
+
     @property
     def jwks_url(self) -> str:
         return self.oidc_jwks_url or f"{self.oidc_issuer}/protocol/openid-connect/certs"

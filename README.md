@@ -17,8 +17,9 @@ The full product architecture and phased build plan are in [`PharmaSafe Product 
 | 2 | Case domain | **Done** |
 | 3 | Intake | **Done** |
 | 4 | Workflow | **Done** |
-| 5 | AI gateway and AI pipeline | Next |
-| 6–10 | Review UI → validation pack | Planned |
+| 5 | AI gateway and AI pipeline | **Done** |
+| 6 | Review UI | Next |
+| 7–10 | Submission → validation pack | Planned |
 
 ## Repository layout
 
@@ -33,6 +34,7 @@ apps/
 packages/
   domain/             E2B-aligned case model and deterministic rules (pure, mypy strict, 85% coverage)
   platform/           Settings, JSON logging, auth, tenancy, audit, e-signatures, telemetry, outbox
+config/ai_bundles/    Signed AI configuration bundles (prompts, pinned models, thresholds)
 eval/                 Datasets, harness and reports for AI evaluation (Phase 8)
 tools/synthetic_data/ Synthetic report generator (Phase 8)
 infra/terraform, infra/helm   Azure infrastructure (Phase 10)

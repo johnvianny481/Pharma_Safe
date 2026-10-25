@@ -66,8 +66,10 @@ def qc_sampled(case_id: str, version: int, rate: Decimal) -> bool:
     return position < rate
 
 
-def review_plan(case: SafetyCase, *, sampled: bool) -> ReviewPlan:
-    serious = case_is_serious(case)
+def review_plan(case: SafetyCase, *, sampled: bool, flagged_serious: bool = False) -> ReviewPlan:
+    """Serious cases (recorded criteria, or flagged by the AI seriousness signals) need
+    quality and medical review; sampled non-serious cases need quality review."""
+    serious = flagged_serious or case_is_serious(case)
     return ReviewPlan(quality=serious or sampled, medical=serious)
 
 

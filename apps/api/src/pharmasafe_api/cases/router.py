@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import AwareDatetime, BaseModel, Field
 from sqlalchemy.orm import Session
 
+from pharmasafe_api.cases import ai as case_ai
 from pharmasafe_api.cases import service
 from pharmasafe_api.cases.models import CaseClockRow, CaseRow, CaseVersionRow
 from pharmasafe_api.deps import TenantSession, require_roles
@@ -345,6 +346,41 @@ def follow_up(
             reason=body.reason,
         )
     return VersionDetail(**_version_summary(row).model_dump(), content=row.content)
+
+
+class AiRun(BaseModel):
+    kind: str
+    bundle_version: str
+    status: str
+    automation_level: str
+    flags: list[str]
+    result: dict[str, Any]
+    created_at: datetime
+
+
+@router.get("/{case_id}/versions/{version}/ai", response_model=list[AiRun])
+def ai_runs(
+    case_id: CaseId, version: int, principal: Reader, session: TenantSession
+) -> list[AiRun]:
+    """What the AI pipeline did for this version: proposals (suggestions at L0), the two
+    seriousness signals, duplicates, coding, follow-up questions and the narrative draft."""
+    with _errors():
+        service.get_case(session, case_id, principal.scope)
+        kinds = (case_ai.PIPELINE, case_ai.NARRATIVE)
+        rows = [case_ai.run_of(session, case_id, version, kind) for kind in kinds]
+    return [
+        AiRun(
+            kind=r.kind,
+            bundle_version=r.bundle_version,
+            status=r.status,
+            automation_level=r.automation_level,
+            flags=r.flags,
+            result=r.result,
+            created_at=r.created_at,
+        )
+        for r in rows
+        if r is not None
+    ]
 
 
 @router.get("/{case_id}/versions/{version}/rebuild", response_model=RebuiltVersion)

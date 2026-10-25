@@ -12,6 +12,8 @@
 | Run the API (:8000) | `make api` | `./scripts/dev.ps1 api` |
 | Poll intake mailboxes | `make email-intake` | `./scripts/dev.ps1 email-intake` |
 | Run the case workflow worker | `make workflow-worker` | `./scripts/dev.ps1 workflow-worker` |
+| Run the AI gateway (:8001) | `make ai-gateway` | `./scripts/dev.ps1 ai-gateway` |
+| Run the AI pipeline worker | `make ai-worker` | `./scripts/dev.ps1 ai-worker` |
 | Status | `make ps` | `./scripts/dev.ps1 ps` |
 | Logs | `make logs` | `./scripts/dev.ps1 logs` |
 | Stop (keep data) | `make down` | `./scripts/dev.ps1 down` |
@@ -79,6 +81,37 @@ Run `make workflow-worker` next to the API. It runs the Temporal case workflow a
 The person who did data entry cannot sign a later step of the same version. To try it, sign data entry as `acme.processor`, then quality and medical review as `acme.quality` and `acme.medical`. Escalations are in `deadline_escalations` and the audit trail.
 
 **Workflow changes.** A change to `workflows.py` that alters the commands a running workflow issues must be guarded with `workflow.patched(...)`. The replay test fails otherwise. Record a new history with `PHARMASAFE_RECORD_HISTORIES=1` and commit it with the change.
+
+## AI gateway and pipeline
+
+Run three processes next to the API, each in its own terminal:
+
+- `make ai-gateway` serves the gateway on :8001.
+- `make ai-worker` runs the pipeline on the `ai-pipeline` queue.
+- `make workflow-worker` runs the case workflow, which starts the pipeline for each new case (ADR 0014).
+
+By default everything runs on **MockLLM** (bundle `mock-2026.10.1`), so no provider keys are needed.
+
+- `GET /cases/{id}/versions/{v}/ai` shows what the pipeline did: proposals (suggestions at L0), rejected values with reasons, both seriousness signals, duplicates with reasons, coding, follow-up questions and the narrative draft.
+- AI values in the case have `source: ai`, an evidence span pointing at the source document, a confidence, and no confirmation until a person confirms them.
+- The tenant's automation level is `tenants.ai_automation_level` (L0, L1 or L2); the default is L1. Set it as the owner, for example `UPDATE tenants SET ai_automation_level = 'L0' WHERE slug = 'acme-pharma'`.
+- Model calls are in `ai_calls`. Redacted traces are in Langfuse at http://localhost:3000, one trace per case (`case-{id}`).
+- The monthly budget is USD 500 per tenant by default. Set another one with `INSERT INTO ai_tenant_budgets VALUES ('<tenant id>', 50)`.
+
+**Real providers.** Set `PHARMASAFE_AZURE_OPENAI_ENDPOINT`, `PHARMASAFE_AZURE_OPENAI_KEY` and `PHARMASAFE_OPENAI_API_KEY`, then `PHARMASAFE_AI_BUNDLE_VERSION=2026.10.1`. The Azure deployment must be called `pharmasafe-gpt-4o` and serve `gpt-4o-2024-08-06`. Use synthetic reports only.
+
+**Changing prompts or settings** (change control):
+
+1. Edit `config/ai_bundles/prompts.py`.
+2. Run `uv run python config/ai_bundles/prompts.py`.
+3. Re-sign each changed bundle: `uv run python -m pharmasafe_platform.aiconfig sign config/ai_bundles/<version> <private-key> <key-id>`.
+4. Check it: `uv run python -m pharmasafe_platform.aiconfig verify config/ai_bundles/<version>`.
+
+An edited but unsigned bundle is refused by every service, on purpose. A changed bundle should get a new version: running cases keep the version they started with.
+
+**Signing keys.** The development key is at `.secrets/ai-bundle-dev-2026-10.key`. It is git-ignored; its public half is `config/ai_bundles/trusted_keys/dev-2026-10.pub`. To make your own key, run `uv run python -m pharmasafe_platform.aiconfig keygen .secrets/<id>.key config/ai_bundles/trusted_keys/<id>.pub`. Release keys belong in Key Vault, never on a laptop.
+
+**Redaction key.** `PHARMASAFE_REDACTION_MASTER_KEY` encrypts the token mappings. The all-zero value in `.env.example` is for local use only. Losing the key makes stored mappings unreadable; the case data itself is not affected.
 
 ## Database roles
 

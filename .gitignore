@@ -33,3 +33,6 @@ apps/review_ui/coverage/
 .DS_Store
 Thumbs.db
 .hypothesis/
+
+# AI bundle signing keys (private; only public keys under config/ai_bundles/trusted_keys)
+/.secrets/

@@ -22,9 +22,18 @@ conditions, which survive worker restarts and deploys. Activities are idempotent
 retried ``open_task`` reuses the task id the workflow chose with ``workflow.uuid4()``,
 and escalations are unique per deadline and level.
 
+**AI processing.** The AI pipeline runs as a child workflow on the ``ai-pipeline`` task
+queue (``pharmasafe_ai_worker``). It always finishes: if the AI is unavailable it records
+the case in L0 manual mode, and if the child itself fails, the case still goes on to
+triage. After data entry, a narrative draft is requested from confirmed fields; it is a
+convenience and never blocks review.
+
 **Versioning.** ``WORKFLOW_VERSION`` identifies this definition. Incompatible changes to
 running workflows must be guarded with ``workflow.patched("<change-id>")``, and the
 replay test (``tests/histories``) must keep passing against recorded histories.
+
+- v1 (Phase 4): AI processing was a placeholder activity.
+- v2 (Phase 5): patches ``ai-pipeline`` (the child workflow) and ``narrative-draft``.
 """
 
 import contextlib
@@ -33,8 +42,16 @@ from datetime import UTC, date, datetime, timedelta
 
 from temporalio import workflow
 from temporalio.common import RetryPolicy
+from temporalio.exceptions import ActivityError, ChildWorkflowError
 
 with workflow.unsafe.imports_passed_through():
+    from pharmasafe_ai_worker.contracts import (
+        PIPELINE_WORKFLOW,
+        NarrativeInput,
+        PipelineInput,
+        pipeline_workflow_id,
+    )
+    from pharmasafe_ai_worker.contracts import TASK_QUEUE as AI_TASK_QUEUE
     from pharmasafe_workflow_worker.contracts import (
         SIGNAL,
         WORKFLOW_NAME,
@@ -49,9 +66,14 @@ with workflow.unsafe.imports_passed_through():
         WorkflowState,
     )
 
-WORKFLOW_VERSION = 1
+WORKFLOW_VERSION = 2
+AI_PIPELINE_PATCH = "ai-pipeline"
+NARRATIVE_PATCH = "narrative-draft"
 
 ACTIVITY_TIMEOUT = timedelta(minutes=2)
+AI_TIMEOUT = timedelta(minutes=30)
+NARRATIVE_TIMEOUT = timedelta(minutes=10)
+NARRATIVE_RETRY = RetryPolicy(initial_interval=timedelta(seconds=2), maximum_attempts=3)
 RETRY = RetryPolicy(initial_interval=timedelta(seconds=1), maximum_interval=timedelta(minutes=1))
 STAGE_OF_TASK = {
     "data_entry": "data_entry_review",
@@ -103,7 +125,10 @@ class CaseWorkflow:
             await self._set_stage("received")
             await self._set_stage("pre_processing")  # done at intake (ADR 0012)
             await self._set_stage("ai_processing")
-            await self._activity("ai_processing", self._ref(), str)
+            if workflow.patched(AI_PIPELINE_PATCH):
+                await self._ai_pipeline()
+            else:  # workflows started before Phase 5 keep the L0 placeholder
+                await self._activity("ai_processing", self._ref(), str)
 
         while True:
             triage = await self._triage()
@@ -138,6 +163,8 @@ class CaseWorkflow:
         outcome = await self._task("data_entry", first.version)
         if outcome != "completed":
             return outcome
+        if workflow.patched(NARRATIVE_PATCH):
+            await self._draft_narrative(first.version)
         # Data entry may have changed seriousness, so plan the remaining steps now.
         plan = await self._triage()
         if plan.approved:
@@ -242,6 +269,35 @@ class CaseWorkflow:
         self._version = result.version
         self._deadlines = result.deadlines
         return result
+
+    async def _ai_pipeline(self) -> None:
+        inp = self._require_input()
+        try:
+            await workflow.execute_child_workflow(
+                PIPELINE_WORKFLOW,
+                PipelineInput(inp.tenant_id, inp.case_id, self._version),
+                id=pipeline_workflow_id(inp.case_id, self._version),
+                task_queue=AI_TASK_QUEUE,
+                execution_timeout=AI_TIMEOUT,
+            )
+        except ChildWorkflowError:
+            # The pipeline records L0 itself when the AI is down; reaching here means the
+            # pipeline could not even finish. People take over, as at L0.
+            workflow.logger.warning("AI pipeline failed; continuing with manual processing")
+
+    async def _draft_narrative(self, version: int) -> None:
+        inp = self._require_input()
+        try:
+            await workflow.execute_activity(
+                "draft_narrative",
+                NarrativeInput(inp.tenant_id, inp.case_id, version),
+                result_type=str,
+                task_queue=AI_TASK_QUEUE,
+                start_to_close_timeout=NARRATIVE_TIMEOUT,
+                retry_policy=NARRATIVE_RETRY,
+            )
+        except ActivityError:
+            workflow.logger.warning("narrative draft failed; reviewers write it by hand")
 
     async def _refresh_deadlines(self) -> None:
         self._deadlines = await self._activity("deadlines", self._ref(), list[DeadlineInfo])

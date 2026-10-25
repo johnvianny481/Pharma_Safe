@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Temporal workers for the case workflow and regulatory clocks"
 requires-python = "==3.12.*"
 dependencies = [
+    "pharmasafe-ai-worker",
     "pharmasafe-api",
     "pharmasafe-domain",
     "pharmasafe-platform",

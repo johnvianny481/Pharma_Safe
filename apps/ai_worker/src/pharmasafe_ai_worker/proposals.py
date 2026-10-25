@@ -38,7 +38,7 @@ from pharmasafe_ai_gateway.schemas import (
     SeriousnessOut,
     TextValue,
 )
-from pharmasafe_ai_worker.dictionary import Dictionary, Kind
+from pharmasafe_api.coding.dictionary import Dictionary, Kind
 from pharmasafe_domain.ai.duplicates import normalise_term
 from pharmasafe_domain.ai.evidence import Rejection, check_evidence
 from pharmasafe_domain.ai.redaction import Redaction, find_identifiers

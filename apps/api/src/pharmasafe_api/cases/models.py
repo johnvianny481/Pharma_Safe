@@ -24,6 +24,9 @@ class CaseRow(Base):
     day_zero: Mapped[date | None] = mapped_column(Date)
     latest_version: Mapped[int] = mapped_column(Integer)
     workflow_stage: Mapped[str] = mapped_column(Text, default="received")
+    merged_into: Mapped[UUID | None]
+    merged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    merged_by: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[str] = mapped_column(Text)
 

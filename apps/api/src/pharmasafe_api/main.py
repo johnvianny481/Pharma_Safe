@@ -6,8 +6,11 @@ from fastapi import FastAPI
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.trace import TracerProvider
 
+from pharmasafe_api.admin.router import router as admin_router
 from pharmasafe_api.audit.router import router as audit_router
 from pharmasafe_api.cases.router import router as cases_router
+from pharmasafe_api.coding.dictionary import SyntheticDictionary
+from pharmasafe_api.coding.router import router as coding_router
 from pharmasafe_api.identity.router import router as identity_router
 from pharmasafe_api.intake.extraction import OcrEngine, TesseractOcr
 from pharmasafe_api.intake.router import router as intake_router
@@ -57,8 +60,10 @@ def create_app(
     )
     # None when Tesseract is not installed: images are then held for manual entry.
     app.state.ocr = ocr or TesseractOcr.find(settings.tesseract_cmd)
-    # Example rule sets for now; per-tenant configuration arrives with the admin screens.
+    # Example rule sets; tenants choose which regulators apply (admin settings).
     app.state.clock_rules = seed_registry()
+    # Synthetic test dictionary until a customer loads licensed MedDRA and WHODrug.
+    app.state.dictionary = SyntheticDictionary()
 
     @app.get("/healthz", tags=["ops"])
     def healthz() -> dict[str, str]:
@@ -69,6 +74,8 @@ def create_app(
     app.include_router(cases_router)
     app.include_router(intake_router)
     app.include_router(review_router)
+    app.include_router(admin_router)
+    app.include_router(coding_router)
 
     FastAPIInstrumentor.instrument_app(
         app,

@@ -16,10 +16,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import AwareDatetime, BaseModel, Field
 from sqlalchemy.orm import Session
 
+from pharmasafe_api.audit.router import AuditEntry
 from pharmasafe_api.cases import ai as case_ai
+from pharmasafe_api.cases import merge as merging
 from pharmasafe_api.cases import service
 from pharmasafe_api.cases.models import CaseClockRow, CaseRow, CaseVersionRow
 from pharmasafe_api.deps import TenantSession, require_roles
+from pharmasafe_api.intake import service as intake
+from pharmasafe_api.intake.models import SourceDocumentRow
 from pharmasafe_domain.case import ItemId, SafetyCase
 from pharmasafe_domain.changes import (
     AddItem,
@@ -33,7 +37,7 @@ from pharmasafe_domain.provenance import Tracked
 from pharmasafe_domain.rules.checks import Issue, approval_blockers, check_case
 from pharmasafe_domain.rules.seriousness import case_is_serious
 from pharmasafe_domain.rules.validity import assess_validity
-from pharmasafe_platform.audit import Actor
+from pharmasafe_platform.audit import Actor, list_entries
 from pharmasafe_platform.auth import AuthenticationError, AuthorizationError, Principal, Role
 from pharmasafe_platform.context import current_case_id
 from pharmasafe_platform.signatures import ReauthenticationRequired, ReauthenticationReused
@@ -56,6 +60,10 @@ Editor = Annotated[
 ]
 Approver = Annotated[
     Principal, Depends(require_roles(Role.QUALITY_REVIEWER, Role.MEDICAL_REVIEWER))
+]
+Merger = Annotated[
+    Principal,
+    Depends(require_roles(Role.CASE_PROCESSOR, Role.QUALITY_REVIEWER, Role.MEDICAL_REVIEWER)),
 ]
 Auditor = Annotated[Principal, Depends(require_roles(Role.TENANT_ADMIN, Role.QUALITY_REVIEWER))]
 
@@ -122,6 +130,16 @@ class StartFollowUp(BaseModel):
     reason: Reason = None
 
 
+class Merge(BaseModel):
+    into: UUID = Field(description="The master case that receives the picked values")
+    picks: list[str] = Field(
+        max_length=200,
+        description="Paths in the duplicate: fields (/patient/age) or items (/drugs/d1)",
+    )
+    reauth_token: str = Field(description="Access token from a fresh login (prompt=login)")
+    reason: Reason = None
+
+
 # ---------------------------------------------------------------- responses
 
 
@@ -133,6 +151,8 @@ class CaseSummary(BaseModel):
     day_zero: date | None
     latest_version: int
     created_at: datetime
+    workflow_stage: str
+    merged_into: UUID | None
 
 
 class VersionSummary(BaseModel):
@@ -153,6 +173,18 @@ class CaseDetail(CaseSummary):
 
 class VersionDetail(VersionSummary):
     content: dict[str, Any]
+
+
+class SourceText(BaseModel):
+    """The case's source document text; evidence offsets index into ``text``."""
+
+    document_id: UUID
+    filename: str | None
+    content_type: str
+    text: str
+    report_start: int
+    report_end: int
+    language: str
 
 
 class IssueOut(BaseModel):
@@ -356,6 +388,69 @@ class AiRun(BaseModel):
     flags: list[str]
     result: dict[str, Any]
     created_at: datetime
+
+
+@router.get("/{case_id}/audit", response_model=list[AuditEntry])
+def case_audit(
+    case_id: CaseId,
+    principal: Reader,
+    session: TenantSession,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> list[AuditEntry]:
+    """This case's audit trail, newest first, for anyone who may see the case."""
+    with _errors():
+        service.get_case(session, case_id, principal.scope)
+    rows = list_entries(session, entity_type=service.ENTITY, entity_id=str(case_id), limit=limit)
+    return [AuditEntry.model_validate(row, from_attributes=True) for row in rows]
+
+
+@router.get("/{case_id}/source", response_model=SourceText)
+def source(case_id: CaseId, principal: Reader, session: TenantSession) -> SourceText:
+    """The text the case came from, for showing evidence next to the form."""
+    with _errors():
+        service.get_case(session, case_id, principal.scope)
+    found = intake.source_of_case(session, case_id)
+    if found is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="this case has no source text")
+    document = session.get_one(SourceDocumentRow, found.document_id)
+    text = intake.texts_of(session, [found.document_id])[found.document_id]
+    return SourceText(
+        document_id=found.document_id,
+        filename=document.filename,
+        content_type=document.content_type,
+        text=text.text,
+        report_start=found.offset,
+        report_end=found.offset + len(found.text),
+        language=text.language,
+    )
+
+
+@router.post("/{case_id}/merge", response_model=VersionDetail)
+def merge(
+    case_id: CaseId, body: Merge, principal: Merger, session: TenantSession, request: Request
+) -> VersionDetail:
+    """Merge this duplicate into ``into``: copy the picks, e-sign, close the duplicate."""
+    try:
+        reauth = request.app.state.verifier.verify(body.reauth_token)
+    except AuthenticationError as exc:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, detail=f"re-authentication failed: {exc}"
+        ) from exc
+    with _errors():
+        duplicate = service.get_case(session, case_id, principal.scope)
+        master = service.get_case(session, body.into, principal.scope)
+        row = merging.merge_duplicate(
+            session,
+            duplicate,
+            master,
+            picks=body.picks,
+            signer=principal,
+            reauth=reauth,
+            signatures=request.app.state.signatures,
+            ctx=_context(request),
+            reason=body.reason,
+        )
+    return VersionDetail(**_version_summary(row).model_dump(), content=row.content)
 
 
 @router.get("/{case_id}/versions/{version}/ai", response_model=list[AiRun])

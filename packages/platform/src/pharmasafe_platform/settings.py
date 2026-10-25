@@ -4,6 +4,7 @@ A ``.env`` file in the working directory is read too, for local development only
 Real environment variables always win over the file.
 """
 
+from decimal import Decimal
 from enum import StrEnum
 from functools import lru_cache
 
@@ -79,6 +80,8 @@ class Settings(BaseSettings):
     # In Azure it comes from Key Vault.
     redaction_key_id: str = "local-1"
     redaction_master_key: SecretStr = SecretStr("")
+    # Monthly AI budget for tenants without their own limit (USD).
+    ai_default_monthly_budget_usd: Decimal = Decimal("500")
 
     @property
     def jwks_url(self) -> str:

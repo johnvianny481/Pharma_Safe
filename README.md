@@ -18,8 +18,9 @@ The full product architecture and phased build plan are in [`PharmaSafe Product 
 | 3 | Intake | **Done** |
 | 4 | Workflow | **Done** |
 | 5 | AI gateway and AI pipeline | **Done** |
-| 6 | Review UI | Next |
-| 7–10 | Submission → validation pack | Planned |
+| 6 | Review UI | **Done** |
+| 7 | Submission and exchange | Next |
+| 8–10 | Evaluation → validation pack | Planned |
 
 ## Repository layout
 

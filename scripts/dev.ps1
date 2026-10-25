@@ -63,6 +63,7 @@ $targets = [ordered]@{
     "email-intake" = { Run uv run python -m pharmasafe_api.intake.email_intake }
     "workflow-worker" = { Run uv run python -m pharmasafe_workflow_worker }
     "ai-worker"  = { Run uv run python -m pharmasafe_ai_worker }
+    e2e          = { InUI { Run npx playwright test } }
     api          = { Run uv run uvicorn pharmasafe_api.main:app --reload --port 8000 }
     "ai-gateway" = { Run uv run uvicorn pharmasafe_ai_gateway.main:app --reload --port 8001 }
     help         = { "Targets: " + ($targets.Keys -join ", ") }

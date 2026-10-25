@@ -1,8 +1,19 @@
-import { useQuery } from "@tanstack/react-query";
+import { Link, RouterProvider } from "react-aria-components";
+import { BrowserRouter, Route, Routes, useHref, useNavigate, type NavigateOptions } from "react-router";
 
-import { apiGet, type Me } from "./api";
 import { useAuth } from "./auth";
+import { Button, ErrorText } from "./components/ui";
 import { IntakeForm } from "./IntakeForm";
+import { AdminPage } from "./pages/AdminPage";
+import { CasePage } from "./pages/CasePage";
+import { QueuePage } from "./pages/QueuePage";
+import { useMe } from "./queries";
+
+declare module "react-aria-components" {
+  interface RouterConfig {
+    routerOptions: NavigateOptions;
+  }
+}
 
 const INTAKE_ROLES = ["intake_processor", "case_processor"];
 
@@ -11,59 +22,71 @@ function scopeLabel(values: string[] | null): string {
   return values.length ? values.join(", ") : "none";
 }
 
-function Profile({ accessToken }: { accessToken: string }) {
-  const me = useQuery({
-    queryKey: ["me", accessToken],
-    queryFn: () => apiGet<Me>("/me", accessToken),
-    retry: false,
-  });
+function Shell() {
+  const auth = useAuth();
+  const navigate = useNavigate();
+  const me = useMe();
+  const roles = me.data?.roles ?? [];
 
-  if (me.isPending) return <p role="status">Loading your profile…</p>;
-  if (me.isError) return <p role="alert">Could not load your profile: {me.error.message}</p>;
-  const canEnterReports = me.data.roles.some((role) => INTAKE_ROLES.includes(role));
   return (
-    <>
-      <dl>
-        <dt>User</dt>
-        <dd>
-          {me.data.display_name} ({me.data.username})
-        </dd>
-        <dt>Tenant</dt>
-        <dd>{me.data.tenant_id ?? "none (platform)"}</dd>
-        <dt>Roles</dt>
-        <dd>{me.data.roles.join(", ") || "none"}</dd>
-        <dt>Products</dt>
-        <dd>{scopeLabel(me.data.products)}</dd>
-        <dt>Regions</dt>
-        <dd>{scopeLabel(me.data.regions)}</dd>
-      </dl>
-      {canEnterReports && <IntakeForm accessToken={accessToken} />}
-    </>
+    <RouterProvider navigate={navigate} useHref={useHref}>
+      <a href="#main" className="skip-link">Skip to main content</a>
+      <header className="app-header">
+        <p className="brand">PharmaSafe Review</p>
+        <nav aria-label="Main">
+          <Link href="/">Work queue</Link>
+          {roles.some((r) => INTAKE_ROLES.includes(r)) && <Link href="/intake">New report</Link>}
+          {roles.includes("tenant_admin") && <Link href="/admin">Administration</Link>}
+        </nav>
+        {me.isError && <ErrorText error={new Error(`Could not load your profile: ${me.error.message}`)} />}
+        {me.data && (
+          <dl className="profile" aria-label="Signed in as">
+            <dt>User</dt>
+            <dd>{me.data.display_name} ({me.data.username})</dd>
+            <dt>Roles</dt>
+            <dd>{me.data.roles.join(", ") || "none"}</dd>
+            <dt>Products</dt>
+            <dd>{scopeLabel(me.data.products)}</dd>
+            <dt>Regions</dt>
+            <dd>{scopeLabel(me.data.regions)}</dd>
+          </dl>
+        )}
+        <Button variant="quiet" onPress={() => void auth.signOut()}>Sign out</Button>
+      </header>
+      <main id="main" tabIndex={-1}>
+        <Routes>
+          <Route path="/" element={<QueuePage />} />
+          <Route path="/intake" element={<IntakePage />} />
+          <Route path="/cases/:caseId" element={<CasePage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="*" element={<p>Page not found.</p>} />
+        </Routes>
+      </main>
+    </RouterProvider>
   );
+} // prettier-ignore
+
+function IntakePage() {
+  const { user } = useAuth();
+  return user ? <IntakeForm accessToken={user.access_token} /> : null;
 }
 
-/** Sign-in, identity and report intake. Queues and the case workspace arrive in Phase 6. */
+/** Sign-in, then the review workspace: queue, case workspace, intake and administration. */
 export function App() {
   const auth = useAuth();
-
+  if (auth.loading) return <p role="status">Checking your session…</p>;
+  if (!auth.user) {
+    return (
+      <main id="main">
+        <h1>PharmaSafe Review</h1>
+        {auth.error && <p role="alert">Sign-in failed: {auth.error}</p>}
+        <Button variant="primary" onPress={() => void auth.signIn()}>Sign in</Button>
+      </main>
+    );
+  }
   return (
-    <main>
-      <h1>PharmaSafe Review</h1>
-      {auth.error && <p role="alert">Sign-in failed: {auth.error}</p>}
-      {auth.loading ? (
-        <p role="status">Checking your session…</p>
-      ) : auth.user ? (
-        <>
-          <Profile accessToken={auth.user.access_token} />
-          <button type="button" onClick={() => void auth.signOut()}>
-            Sign out
-          </button>
-        </>
-      ) : (
-        <button type="button" onClick={() => void auth.signIn()}>
-          Sign in
-        </button>
-      )}
-    </main>
+    <BrowserRouter>
+      <Shell />
+    </BrowserRouter>
   );
-}
+} // prettier-ignore

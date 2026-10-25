@@ -24,7 +24,7 @@ from pharmasafe_ai_gateway.ledger import Ledger
 from pharmasafe_ai_gateway.mock import MockLLM
 from pharmasafe_ai_gateway.service import GatewayService
 from pharmasafe_ai_worker.activities import Deps
-from pharmasafe_ai_worker.dictionary import SyntheticDictionary
+from pharmasafe_api.coding.dictionary import SyntheticDictionary
 from pharmasafe_domain.rules.clocks import seed_registry
 from pharmasafe_platform.aiconfig import BUNDLE_FILE, SIGNATURE_FILE, BundleStore, sign
 from pharmasafe_platform.db import Database

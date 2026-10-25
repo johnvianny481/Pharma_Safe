@@ -16,8 +16,8 @@ from temporalio.worker import Worker
 from pharmasafe_ai_gateway.client import HttpGateway
 from pharmasafe_ai_worker.activities import Deps, PipelineActivities
 from pharmasafe_ai_worker.contracts import TASK_QUEUE
-from pharmasafe_ai_worker.dictionary import SyntheticDictionary
 from pharmasafe_ai_worker.workflows import CasePipelineWorkflow
+from pharmasafe_api.coding.dictionary import SyntheticDictionary
 from pharmasafe_domain.rules.clocks import seed_registry
 from pharmasafe_platform.aiconfig import BundleStore
 from pharmasafe_platform.db import Database

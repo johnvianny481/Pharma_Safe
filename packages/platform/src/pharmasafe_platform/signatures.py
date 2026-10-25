@@ -31,6 +31,7 @@ class SignatureMeaning(StrEnum):
     QUALITY_REVIEWED = "Quality reviewed"
     MEDICALLY_APPROVED = "Medically approved"
     APPROVED = "Approved"
+    DUPLICATE_MERGED = "Duplicate merged"
 
 
 # Which roles may apply each meaning. Workflow rules (e.g. four-eyes) are added in Phase 4.
@@ -39,6 +40,9 @@ MEANING_ROLES: Mapping[SignatureMeaning, frozenset[Role]] = {
     SignatureMeaning.QUALITY_REVIEWED: frozenset({Role.QUALITY_REVIEWER}),
     SignatureMeaning.MEDICALLY_APPROVED: frozenset({Role.MEDICAL_REVIEWER}),
     SignatureMeaning.APPROVED: frozenset({Role.QUALITY_REVIEWER, Role.MEDICAL_REVIEWER}),
+    SignatureMeaning.DUPLICATE_MERGED: frozenset(
+        {Role.CASE_PROCESSOR, Role.QUALITY_REVIEWER, Role.MEDICAL_REVIEWER}
+    ),
 }
 
 # A re-authentication stamped this far in the future is treated as clock skew, not fraud.

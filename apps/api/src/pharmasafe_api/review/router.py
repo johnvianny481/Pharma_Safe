@@ -36,6 +36,8 @@ class TaskOut(BaseModel):
     close_reason: str | None
     signature_id: UUID | None
     next_due: date | None = None
+    case_stage: str | None = None
+    flags: list[str] = []
 
 
 class Assign(BaseModel):
@@ -60,7 +62,9 @@ def work_queue(
 ) -> list[TaskOut]:
     """Open tasks for the caller's roles and scope, by deadline risk (earliest due first)."""
     return [
-        _out(item.task, item.case_number, item.next_due)
+        _out(item.task, item.case_number, item.next_due).model_copy(
+            update={"case_stage": item.stage, "flags": item.flags}
+        )
         for item in service.queue(session, principal, mine_only=mine, limit=limit)
     ]
 

@@ -36,3 +36,8 @@ Thumbs.db
 
 # AI bundle signing keys (private; only public keys under config/ai_bundles/trusted_keys)
 /.secrets/
+
+# Playwright output
+apps/review_ui/playwright-report/
+apps/review_ui/test-results/
+apps/review_ui/blob-report/

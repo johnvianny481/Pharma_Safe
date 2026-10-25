@@ -10,7 +10,7 @@ SBOM_NPM := @cyclonedx/cyclonedx-npm@6.0.1
 
 .PHONY: help env up down reset logs ps sync install lint fmt typecheck test test-domain \
         security sbom ui-install ci migrate seed verify-audit api ai-gateway email-intake \
-        workflow-worker ai-worker
+        workflow-worker ai-worker e2e
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-12s %s\n",$$1,$$2}'
@@ -94,6 +94,9 @@ workflow-worker: ## Run the Temporal case workflow worker and the outbox relay
 
 ai-worker: ## Run the AI pipeline worker (model calls go through the AI gateway)
 	uv run python -m pharmasafe_ai_worker
+
+e2e: ## Playwright end-to-end tests on the full stack (needs `make up`)
+	cd $(UI) && npx playwright test
 
 api: ## Run the API locally on :8000
 	uv run uvicorn pharmasafe_api.main:app --reload --port 8000

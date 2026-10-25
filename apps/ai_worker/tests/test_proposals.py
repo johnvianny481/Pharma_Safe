@@ -5,7 +5,6 @@ from typing import Any
 
 import pytest
 
-from pharmasafe_ai_worker.dictionary import Kind, SyntheticDictionary, similarity
 from pharmasafe_ai_worker.proposals import (
     EvidenceMapper,
     accept_questions,
@@ -14,6 +13,7 @@ from pharmasafe_ai_worker.proposals import (
     build_extraction,
     coding_items,
 )
+from pharmasafe_api.coding.dictionary import Kind, SyntheticDictionary, similarity
 from pharmasafe_domain.ai.redaction import redact
 from pharmasafe_domain.ai.seriousness import rule_signal
 from pharmasafe_domain.case import SafetyCase

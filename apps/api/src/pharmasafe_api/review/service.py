@@ -23,7 +23,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from pharmasafe_api.cases import service as cases
-from pharmasafe_api.cases.models import CaseClockRow, CaseRow
+from pharmasafe_api.cases.models import CaseAiRunRow, CaseClockRow, CaseRow
 from pharmasafe_api.review.models import DeadlineEscalationRow, ReviewTaskRow
 from pharmasafe_domain.rules.review import Step
 from pharmasafe_platform.audit import Actor, AuditEvent, append_audit
@@ -215,6 +215,9 @@ class QueueItem:
     task: ReviewTaskRow
     case_number: str
     next_due: date | None
+    stage: str
+    # Flags of the AI run on this version (serious, duplicates, low confidence, ...).
+    flags: list[str]
 
 
 def queue(
@@ -229,8 +232,17 @@ def queue(
         .where(CaseClockRow.case_id == ReviewTaskRow.case_id)
         .scalar_subquery()
     )
+    flags = (
+        select(CaseAiRunRow.flags)
+        .where(
+            CaseAiRunRow.case_id == ReviewTaskRow.case_id,
+            CaseAiRunRow.case_version == ReviewTaskRow.case_version,
+            CaseAiRunRow.kind == "pipeline",
+        )
+        .scalar_subquery()
+    )
     query = (
-        select(ReviewTaskRow, CaseRow.case_number, next_due)
+        select(ReviewTaskRow, CaseRow.case_number, next_due, CaseRow.workflow_stage, flags)
         .join(CaseRow, CaseRow.id == ReviewTaskRow.case_id)
         .where(
             ReviewTaskRow.status == Status.OPEN.value,
@@ -246,7 +258,10 @@ def queue(
         query = query.where(
             (ReviewTaskRow.assignee.is_(None)) | (ReviewTaskRow.assignee == principal.subject)
         )
-    return [QueueItem(task, number, due) for task, number, due in session.execute(query)]
+    return [
+        QueueItem(task, number, due, stage, list(run_flags or []))
+        for task, number, due, stage, run_flags in session.execute(query)
+    ]
 
 
 def get_task(

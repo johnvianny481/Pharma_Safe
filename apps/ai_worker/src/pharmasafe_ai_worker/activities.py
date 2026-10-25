@@ -41,7 +41,6 @@ from pharmasafe_ai_worker.contracts import (
     Prepared,
     StepInput,
 )
-from pharmasafe_ai_worker.dictionary import Dictionary, Kind
 from pharmasafe_ai_worker.proposals import (
     EvidenceMapper,
     Proposals,
@@ -54,6 +53,7 @@ from pharmasafe_ai_worker.proposals import (
 from pharmasafe_api.cases import ai as case_ai
 from pharmasafe_api.cases import service as cases
 from pharmasafe_api.cases.models import CaseRow
+from pharmasafe_api.coding.dictionary import Dictionary, Kind
 from pharmasafe_api.intake import service as intake
 from pharmasafe_domain.ai.automation import Level, effective_level
 from pharmasafe_domain.ai.duplicates import (

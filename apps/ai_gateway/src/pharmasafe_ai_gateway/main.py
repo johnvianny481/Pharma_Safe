@@ -11,7 +11,6 @@ served by the mock.
 """
 
 import hmac
-from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any
 from uuid import UUID
@@ -32,7 +31,6 @@ from pharmasafe_platform.logging import configure_logging
 from pharmasafe_platform.settings import Environment, Settings, get_settings
 
 SERVICE_NAME = "ai-gateway"
-DEFAULT_MONTHLY_BUDGET_USD = Decimal("500")
 
 
 class StepRequest(BaseModel):
@@ -74,7 +72,7 @@ def build_service(settings: Settings) -> GatewayService:
     return GatewayService(
         BundleStore(Path(settings.ai_bundle_dir)),
         providers,
-        Ledger(Database(settings.database_url), DEFAULT_MONTHLY_BUDGET_USD),
+        Ledger(Database(settings.database_url), settings.ai_default_monthly_budget_usd),
         call_log,
     )
 

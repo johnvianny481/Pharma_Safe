@@ -21,15 +21,19 @@ from temporalio.worker import Replayer
 
 from pharmasafe_api.cases import ai as case_ai
 from pharmasafe_api.cases import service as cases
+from pharmasafe_api.cases.merge import merge_duplicate
+from pharmasafe_api.cases.models import CaseRow
 from pharmasafe_api.intake import service as intake
 from pharmasafe_domain.rules.clocks import seed_registry
 from pharmasafe_platform.audit import Actor
 from pharmasafe_platform.blobstore import InMemoryBlobStore
+from pharmasafe_platform.signatures import SignatureService
 from pharmasafe_workflow_worker.activities import CaseActivities
 from pharmasafe_workflow_worker.contracts import OpenTaskRequest
 from pharmasafe_workflow_worker.workflows import WORKFLOW_VERSION, CaseWorkflow
 
 HISTORIES = Path(__file__).parent / "histories"
+SIGNATURES = SignatureService(max_auth_age=timedelta(minutes=5))
 TODAY = datetime.now(UTC).date()
 
 Scenario = Callable[[Any, WorkflowEnvironment], Awaitable[None]]
@@ -171,6 +175,38 @@ def test_a_report_is_prefilled_by_the_ai_pipeline_before_data_entry(
                 narrative = case_ai.run_of(session, case_id, 1, case_ai.NARRATIVE)
             assert narrative is not None
             assert "/patient/weight_kg: 80" in narrative.result["draft"]
+
+    run(driver_factory, scenario)
+
+
+def test_a_merged_duplicate_stops_its_workflow(
+    driver_factory: Any, make_content: Callable[..., Any], db: Any
+) -> None:
+    async def scenario(d: Any, env: WorkflowEnvironment) -> None:
+        master_id = d.create_case(make_content(TODAY, serious=True))
+        duplicate_id = d.create_case(make_content(TODAY, serious=True))
+        async with d.worker():
+            await d.stage_becomes(duplicate_id, "data_entry_review")
+            await d.stage_becomes(master_id, "data_entry_review")
+            person = d.person("proc-2", "case_processor")
+            with db.tenant_session(d.tenant) as session:
+                merge_duplicate(
+                    session,
+                    session.get_one(CaseRow, duplicate_id),
+                    session.get_one(CaseRow, master_id),
+                    picks=["/patient/initials"],
+                    signer=person,
+                    reauth=person,
+                    signatures=SIGNATURES,
+                    ctx=cases.CaseContext(seed_registry(), datetime.now(UTC)),
+                )
+            await d.stage_becomes(duplicate_id, "merged")
+            await d.handle(duplicate_id).result()  # the workflow has finished
+            # No deadline of the duplicate is escalated any more; the master's still are.
+            await env.sleep(timedelta(days=11))
+            await d.escalations_reach(master_id, 2)
+            assert d.escalations(duplicate_id) == []
+            assert [s for _, s in d.tasks(duplicate_id)] == ["cancelled"]
 
     run(driver_factory, scenario)
 

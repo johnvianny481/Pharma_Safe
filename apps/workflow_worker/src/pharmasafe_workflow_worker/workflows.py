@@ -34,6 +34,8 @@ replay test (``tests/histories``) must keep passing against recorded histories.
 
 - v1 (Phase 4): AI processing was a placeholder activity.
 - v2 (Phase 5): patches ``ai-pipeline`` (the child workflow) and ``narrative-draft``.
+  Phase 6 adds the ``case.merged`` event, which ends the lifecycle (stage ``merged``).
+  Histories without that event replay unchanged, so no patch is needed.
 """
 
 import contextlib
@@ -86,6 +88,10 @@ LEVELS = ("warning", "escalation", "overdue")
 Escalation = tuple[datetime, DeadlineInfo, str]
 
 
+class _Merged(Exception):
+    """The case was merged into another one: the lifecycle stops wherever it is."""
+
+
 @workflow.defn(name=WORKFLOW_NAME)
 class CaseWorkflow:
     def __init__(self) -> None:
@@ -103,6 +109,7 @@ class CaseWorkflow:
         self._follow_up = False
         self._submitted_version = 0
         self._deadlines_stale = False
+        self._merged = False
 
     # ------------------------------------------------------------ interface
 
@@ -121,6 +128,14 @@ class CaseWorkflow:
     @workflow.run
     async def run(self, inp: CaseWorkflowInput) -> None:
         self._input = inp
+        try:
+            await self._lifecycle(inp)
+        except _Merged:
+            # Merged into another case: its open tasks were cancelled with the merge, and
+            # no deadline of this case is escalated any more.
+            await self._set_stage("merged")
+
+    async def _lifecycle(self, inp: CaseWorkflowInput) -> None:
         if not inp.resume:
             await self._set_stage("received")
             await self._set_stage("pre_processing")  # done at intake (ADR 0012)
@@ -218,12 +233,16 @@ class CaseWorkflow:
             self._submitted_version = max(self._submitted_version, event.version or self._version)
         elif event.type == "case.clock_started":
             self._deadlines_stale = True
+        elif event.type == "case.merged":
+            self._merged = True
 
     async def _wait_until(self, done: Callable[[], bool]) -> None:
         """Wait until ``done()`` holds, applying events and escalating deadlines meanwhile."""
         while True:
             while self._inbox:
                 self._absorb(self._inbox.pop(0))
+            if self._merged:
+                raise _Merged
             if self._deadlines_stale:
                 self._deadlines_stale = False
                 await self._refresh_deadlines()

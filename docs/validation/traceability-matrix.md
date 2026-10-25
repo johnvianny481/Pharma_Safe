@@ -118,3 +118,23 @@ Risk: **H** means it affects patient safety or regulatory submissions and gets f
 | AI-19 | Redacted call logging to Langfuse, one trace per case; failures never block a call | L | `test_api.py`: `test_langfuse_gets_one_trace_per_case_and_one_generation_per_call`, `test_langfuse_is_posted_in_the_background_and_failures_are_swallowed` |
 | AI-20 | Pipeline steps are idempotent: a run is recorded once per case version | H | `test_pipeline.py::test_finalize_records_once`; `apps/api/tests/test_cases_api.py::test_ai_runs_are_readable_by_reviewers_and_isolated_by_tenant` |
 | WF-09 | Workflow versioning across Phase 5: v1 and v2 histories replay (the AI pipeline and narrative are patched in) | H | `test_case_workflow.py::test_recorded_histories_still_replay` (`tests/histories/case_workflow_v1.json`, `case_workflow_v2.json`) |
+
+## Phase 6: review UI
+
+E2E = `apps/review_ui/e2e`, Playwright on the full stack with real Keycloak. UI = `apps/review_ui/src` unit tests (Vitest).
+
+| ID | Requirement | Risk | Evidence (tests) |
+|---|---|---|---|
+| UI-02 | Intake to approval through the UI: intake, AI pre-fill, data entry review, approval by another person, each step e-signed | H | E2E `intake-to-approval.spec.ts` |
+| UI-03 | Duplicate comparison and merge: picked values copied as unconfirmed imports, the duplicate closed, e-signed | H | E2E `duplicate-merge.spec.ts`; `apps/api/tests/test_review_ui_api.py`: `test_merge_copies_picked_values_signs_and_closes_the_duplicate`, `test_merging_into_an_approved_case_starts_a_follow_up`, `test_a_merge_is_final_and_checked`, `test_an_approved_case_cannot_be_merged_away`; `apps/workflow_worker/tests/test_case_workflow.py::test_a_merged_duplicate_stops_its_workflow` |
+| UI-04 | Follow-up versioning: a new version from an approved one, which stays read-only and unchanged | H | E2E `follow-up.spec.ts` |
+| UI-05 | E-signature dialog: states subject and meaning, re-authenticates first, signs nothing if re-authentication fails | H | UI `components.test.tsx`: `signing re-authenticates first and sends the fresh token with the reason`, `a cancelled re-authentication signs nothing and says why`; E2E (every signature) |
+| UI-06 | Evidence highlighting in the source document, with the field's own span marked | H | UI `components.test.tsx`: `evidence segments split text at highlight boundaries`, `the source panel marks evidence and the active field`; E2E `intake-to-approval.spec.ts`; `test_review_ui_api.py::test_the_source_text_of_a_case_from_intake` |
+| UI-07 | Field provenance and confidence badges (low confidence flagged); confirm and edit record a person's action | H | UI `components.test.tsx`: `a field shows provenance, low confidence, and confirms on request`, `an edited value is saved as a person's value` |
+| UI-08 | Queues sorted by deadline risk, with AI flags, within the user's roles and scope | H | UI `App.test.tsx::lists open tasks, most urgent first, with deadline risk and AI flags`, `components.test.tsx::deadline risk reads days left to the due date`; `test_review_ui_api.py::test_the_queue_shows_stage_and_ai_flags`; `test_review_api.py::test_queue_is_ordered_by_deadline_risk_and_filtered_by_role` |
+| UI-09 | Seriousness panel shows the LLM and rule signals; every criterion assessed by a person before approval | H | E2E `intake-to-approval.spec.ts` (approval blocked until assessed); `test_ai_rules.py::test_signals_combine_with_or_and_flag_disagreement` |
+| UI-10 | Coding picker offers dictionary candidates only | H | `test_review_ui_api.py::test_coding_search_returns_dictionary_candidates`; `test_proposals.py::test_coding_accepts_only_candidates` |
+| UI-11 | Case audit trail and version history readable by the case's reviewers, isolated by tenant | H | `test_review_ui_api.py::test_a_cases_audit_trail_is_readable_by_its_reviewers`; E2E `intake-to-approval.spec.ts`, `follow-up.spec.ts` |
+| UI-12 | Tenant admin settings: validated, audited per field, own tenant only, tenant admin role only | H | `test_review_ui_api.py`: `test_a_tenant_admin_changes_their_settings_with_an_audit_trail`, `test_invalid_settings_are_refused`, `test_only_tenant_admins_and_only_their_own_row`; E2E (QC setting in `beforeAll`) |
+| UI-13 | WCAG 2.1 AA: no automated violations on intake, queue, workspace, history and admin | H | E2E `accessibility.spec.ts` (axe-core, tags wcag2a/aa, wcag21a/aa) |
+| UI-14 | Sign-in exchanges the authorization code once (React StrictMode safe) | L | E2E sign-in in every spec |

@@ -113,6 +113,36 @@ An edited but unsigned bundle is refused by every service, on purpose. A changed
 
 **Redaction key.** `PHARMASAFE_REDACTION_MASTER_KEY` encrypts the token mappings. The all-zero value in `.env.example` is for local use only. Losing the key makes stored mappings unreadable; the case data itself is not affected.
 
+## Review UI
+
+Run the API, the gateway and both workers (above), then the UI with `cd apps/review_ui && npm run dev`, and open http://localhost:5173. Sign in as a demo user (password `KC_DEMO_USER_PASSWORD` from `.env`).
+
+- **Work queue** (`/`): your open tasks, most urgent deadline first, with AI flags.
+- **Case workspace** (`/cases/{id}`): the source document on the left, with evidence highlighted, and the E2B form on the right. Confirm or correct each value, assess every seriousness criterion, then use **Sign and complete**. Signing asks for your password again in a popup, so allow popups for localhost.
+- **Duplicates**: when the AI flags a possible duplicate, choose **Compare**, pick what to copy, then **Merge** (e-signed). The duplicate is closed into the master case.
+- **History and audit** tab: the versions (approved ones are read-only), **Start follow-up version**, and the case's audit trail.
+- **New report** (`/intake`): the intake form, for intake and case processors.
+- **Administration** (`/admin`, `acme.admin`): automation level, QC sampling, AI budget, regulators, mailbox, and audit chain verification.
+
+A typical walk-through:
+
+1. As `acme.intake`, enter a report with a description.
+2. As `acme.processor`, open it from the queue, confirm the values and sign.
+3. As `acme.quality`, approve it.
+
+With the default QC sampling (10%), some non-serious cases also get a quality review first.
+
+### End-to-end tests (Playwright)
+
+| Task | make | Windows (no make) |
+|---|---|---|
+| Install the browser once | `cd apps/review_ui && npx playwright install chromium` | same |
+| Run the end-to-end tests | `make e2e` | `./scripts/dev.ps1 e2e` |
+
+The tests need `make up`. Playwright starts the API, the gateway (MockLLM), both workers and the UI itself (`scripts/e2e_stack.py`), and reuses ones already running. They sign in through the real Keycloak and use the demo tenant `acme-pharma`. They set its QC sampling to 0, and the cases they create stay in the local database. A failed run leaves traces in `apps/review_ui/test-results`; open one with `npx playwright show-trace <trace.zip>`.
+
+**On Windows**, start them from the folder's real letter case, for example `cd "D:\Resume projects\Pharma_Safe\apps\review_ui"` if that is how Explorer shows it. Otherwise Node loads a module twice and Playwright reports "did not expect test.beforeAll() to be called here".
+
 ## Database roles
 
 The API and workers connect as `pharmasafe_app_user`. It is a non-owner role, so row-level security always applies. Migrations and `seed` connect as the owner (`PHARMASAFE_MIGRATION_DATABASE_URL`). See ADR 0008.
